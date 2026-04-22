@@ -8,9 +8,6 @@
   const DEFAULT_CONFIG = {
     SIMILARITY_THRESHOLD: 0.45,
     GROUP_SIMILARITY_THRESHOLD: 0.65, // Lowered from 0.75 to be more inclusive for existing groups
-    MIN_TABS_FOR_SORT: 0, // This is the ammount of tabs for the button to show, not the ammount of tabs you need in a group
-    DEBOUNCE_DELAY: 250,
-    ANIMATION_DURATION: 800,
     MAX_INIT_CHECKS: 50,
     INIT_CHECK_INTERVAL: 100,
     CONSOLIDATION_DISTANCE_THRESHOLD: 2,
@@ -342,85 +339,59 @@
     "TabAttrModified",
   ]);
 
+  // Tree connectors need the container to be positioned relatively and
+  // to have enough inline-start margin for the trunk at
+  // `TREE_LINE_X + TREE_CONNECTOR_OFFSET_PX` to sit inside the sidebar.
+  // We apply this to BOTH zen-folder and regular tab-group containers so
+  // the tree visual shows up consistently everywhere.
+  const TREE_CONNECTOR_CSS = `
+    zen-folder > .tab-group-container,
+    tab-group:not(zen-folder) > .tab-group-container {
+      margin-inline-start: ${CONFIG.TREE_FOLDER_INDENT_PX}px !important;
+    }
+
+    :root[zen-sidebar-expanded="true"] zen-folder > .tab-group-container,
+    :root[zen-sidebar-expanded="true"] tab-group:not(zen-folder) > .tab-group-container,
+    .zen-related-group-container {
+      position: relative;
+    }
+
+    .tree-connector {
+      position: absolute;
+      top: 0;
+      left: ${CONFIG.TREE_CONNECTOR_OFFSET_PX}px;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      will-change: contents;
+    }
+
+    tab.zen-is-related-parent {
+      overflow: visible !important;
+    }
+
+    tab.zen-is-related-parent > .tab-stack {
+      position: relative;
+      z-index: 1;
+    }
+
+    tab.zen-is-related-child > .tab-stack {
+      margin-inline-start: ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px !important;
+      width: calc(100% - ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px) !important;
+    }
+  `;
+
   const ensureTreeConnectorStyles = () => {
     const styleId = "tidy-tabs-tree-connectors-style";
     const existingStyle = document.getElementById(styleId);
     if (existingStyle) {
-      existingStyle.textContent = `
-        zen-folder > .tab-group-container {
-          margin-inline-start: ${CONFIG.TREE_FOLDER_INDENT_PX}px !important;
-        }
-
-        :root[zen-sidebar-expanded="true"] zen-folder > .tab-group-container,
-        .zen-related-group-container {
-          position: relative;
-        }
-
-        .tree-connector {
-          position: absolute;
-          top: 0;
-          left: ${CONFIG.TREE_CONNECTOR_OFFSET_PX}px;
-          width: 100%;
-          height: 100%;
-          pointer-events: none;
-          z-index: 0;
-          will-change: contents;
-        }
-
-        tab.zen-is-related-parent {
-          overflow: visible !important;
-        }
-
-        tab.zen-is-related-parent > .tab-stack {
-          position: relative;
-          z-index: 1;
-        }
-
-        tab.zen-is-related-child > .tab-stack {
-          margin-inline-start: ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px !important;
-          width: calc(100% - ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px) !important;
-        }
-      `;
+      existingStyle.textContent = TREE_CONNECTOR_CSS;
       return;
     }
-
     const style = document.createElement("style");
     style.id = styleId;
-    style.textContent = `
-      zen-folder > .tab-group-container {
-        margin-inline-start: ${CONFIG.TREE_FOLDER_INDENT_PX}px !important;
-      }
-
-      :root[zen-sidebar-expanded="true"] zen-folder > .tab-group-container,
-      .zen-related-group-container {
-        position: relative;
-      }
-
-      .tree-connector {
-        position: absolute;
-        top: 0;
-        left: ${CONFIG.TREE_CONNECTOR_OFFSET_PX}px;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
-        z-index: 0;
-        will-change: contents;
-      }
-
-      tab.zen-is-related-parent {
-        overflow: visible !important;
-      }
-
-      tab.zen-is-related-parent > .tab-stack {
-        position: relative;
-        z-index: 1;
-      }
-
-      tab.zen-is-related-child > .tab-stack {
-        margin-inline-start: ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px !important;
-        width: calc(100% - ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px) !important;
-      }
-    `;
+    style.textContent = TREE_CONNECTOR_CSS;
     document.documentElement.appendChild(style);
   };
   class TidyTabsTreeConnectors {
@@ -531,7 +502,9 @@
       if (!this.resizeObserver) {
         this.resizeObserver = new ResizeObserver(() => this.scheduleUpdate());
       }
-      const containers = document.querySelectorAll("zen-folder > .tab-group-container");
+      const containers = document.querySelectorAll(
+        "zen-folder > .tab-group-container, tab-group:not(zen-folder) > .tab-group-container"
+      );
       containers.forEach((container) => {
         if (!container._tidyTreeObserved) {
           container._tidyTreeObserved = true;
@@ -570,6 +543,13 @@
           : document.querySelectorAll("zen-folder");
         folders.forEach((folder) => this.refreshFolderConnector(folder));
 
+        // Regular tab-groups get the same tree treatment (simpler logic —
+        // no pinned-collapse / rootMostCollapsed nesting applies).
+        const groups = activeWorkspace
+          ? activeWorkspace.querySelectorAll("tab-group:not(zen-folder)")
+          : document.querySelectorAll("tab-group:not(zen-folder)");
+        groups.forEach((group) => this.refreshTabGroupConnector(group));
+
         if (CONFIG.TREE_INCLUDE_RELATED_TABS) {
           const relatedParents = activeWorkspace
             ? activeWorkspace.querySelectorAll("tab.zen-is-related-parent")
@@ -579,6 +559,40 @@
       } catch (e) {
         console.error("[TidyTabs][Tree] Error during refresh", e);
       }
+    }
+
+    // Minimal version of refreshFolderConnector for regular tab-groups.
+    // Skips folder-only concerns (nested-folder collapse, pinned-section
+    // collapse) that don't exist for vanilla groups.
+    refreshTabGroupConnector(group) {
+      const container = group.querySelector(":scope > .tab-group-container");
+      if (!container) return;
+
+      const isExpanded =
+        document.documentElement.getAttribute("zen-sidebar-expanded") === "true";
+      const isCollapsed = group.hasAttribute("collapsed");
+      const hasActive = group.hasAttribute("has-active");
+      const isVisible = !isCollapsed || hasActive;
+
+      const children =
+        isExpanded && isVisible
+          ? this.getVisibleChildren(container, isCollapsed)
+          : [];
+
+      let connector = container.querySelector(":scope > .tree-connector");
+      if (!children.length) {
+        if (connector) connector.hidden = true;
+        return;
+      }
+
+      if (!connector) {
+        connector = document.createElement("div");
+        connector.className = "tree-connector";
+        container.prepend(connector);
+      }
+      connector.hidden = false;
+
+      this.performSVGUpdate(connector, children, false);
     }
 
     refreshVisualRelationships() {
@@ -1528,13 +1542,16 @@
   };
 
   // --- Fuzzy Grouping (AI-off fallback) ----------------------------------
-  // Approach:
-  //   1. Tokenize each tab's (title + hostname) into meaningful lowercase
-  //      tokens, dropping stopwords & short noise.
-  //   2. Seed clusters with tabs sharing the same hostname (high-signal).
-  //   3. Merge clusters whose Jaccard token overlap exceeds a threshold.
-  //   4. Pick accurate cluster names: most frequent descriptive token,
-  //      falling back to a prettified hostname.
+  // Pipeline:
+  //   1. Tokenize each tab into (title unigrams + title bigrams + hostname
+  //      tokens), lowercased, stopword-filtered, min-length gated.
+  //   2. Compute IDF across the batch so common tokens shrink and rare ones
+  //      stand out.
+  //   3. Seed clusters by hostname (strong prior — same host ≈ same topic).
+  //   4. Greedy-merge clusters by weighted-Jaccard similarity on IDF-boosted
+  //      token weights; titles are weighted higher than hostnames.
+  //   5. Name each cluster by the highest-score (support × IDF × source
+  //      boost) token, preferring bigrams on near-ties.
   //
   // Deterministic, offline, no model required.
   const FUZZY_STOPWORDS = new Set([
@@ -1550,8 +1567,12 @@
     "help","faq","terms","privacy","policy","contact","more","less","menu"
   ]);
 
-  const FUZZY_CLUSTER_THRESHOLD = 0.25; // Jaccard overlap to merge clusters
+  const FUZZY_CLUSTER_THRESHOLD = 0.22; // weighted-Jaccard overlap to merge clusters
   const FUZZY_MIN_TOKEN_LEN = 3;
+  // Bigrams capture multi-word concepts ("tab groups", "credit card") that
+  // get broken up by unigram tokenization. We only bother with title bigrams
+  // since hostnames are usually single-concept.
+  const FUZZY_USE_BIGRAMS = true;
 
   const getTabHost = (tab) => {
     try {
@@ -1563,30 +1584,92 @@
     }
   };
 
+  // Pull tokens out of an arbitrary string: lowercased, stopword-filtered,
+  // min-length-gated. Shared by title and hostname paths.
+  const extractTokens = (source, splitRe) => {
+    if (!source) return [];
+    return source
+      .toLowerCase()
+      .split(splitRe)
+      .filter((t) => t && t.length >= FUZZY_MIN_TOKEN_LEN)
+      .filter((t) => !FUZZY_STOPWORDS.has(t));
+  };
+
   const tokenizeTab = (tab) => {
     const title = getTabTitle(tab) || "";
     const host = getTabHost(tab);
-    // Pull identifier-ish tokens from the hostname (github, youtube, …)
-    // but skip generic tokens that occur in every URL.
-    const hostTokens = host
-      .split(/[.\-]/)
-      .filter((t) => t && t.length >= FUZZY_MIN_TOKEN_LEN)
-      .filter((t) => !FUZZY_STOPWORDS.has(t));
 
-    const titleTokens = title
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((t) => t && t.length >= FUZZY_MIN_TOKEN_LEN)
-      .filter((t) => !FUZZY_STOPWORDS.has(t));
+    const hostTokens = extractTokens(host, /[.\-]/);
+    const titleUnigrams = extractTokens(title, /[^a-z0-9]+/);
 
-    return { host, hostTokens, titleTokens, allTokens: new Set([...hostTokens, ...titleTokens]) };
+    // Adjacent pairs from the title as bigrams (joined with a space). Only
+    // emitted when both parts passed the unigram filter, so we don't get
+    // noise like "the foo".
+    const titleBigrams =
+      FUZZY_USE_BIGRAMS && titleUnigrams.length >= 2
+        ? titleUnigrams
+            .slice(0, -1)
+            .map((tok, i) => `${tok} ${titleUnigrams[i + 1]}`)
+        : [];
+
+    const titleTokens = [...titleUnigrams, ...titleBigrams];
+    const allTokens = new Set([...hostTokens, ...titleTokens]);
+
+    return { host, hostTokens, titleTokens, titleUnigrams, titleBigrams, allTokens };
   };
 
-  const jaccard = (a, b) => {
-    if (!a.size || !b.size) return 0;
-    let intersect = 0;
-    for (const x of a) if (b.has(x)) intersect++;
-    return intersect / (a.size + b.size - intersect);
+  // Inverse-document-frequency over the batch. Rare tokens get high weights,
+  // common ones (present in most tabs) approach zero.
+  //   idf(t) = log((N + 1) / (df(t) + 1)) + 1
+  // The +1s are smoothing so we never divide by zero nor pick up log(1)=0
+  // for tokens present in every doc (those still get the +1 base weight).
+  const computeIDF = (meta) => {
+    const docCount = meta.size;
+    const df = new Map();
+    for (const { allTokens } of meta.values()) {
+      for (const tok of allTokens) df.set(tok, (df.get(tok) || 0) + 1);
+    }
+    const idf = new Map();
+    df.forEach((count, tok) => {
+      idf.set(tok, Math.log((docCount + 1) / (count + 1)) + 1);
+    });
+    return idf;
+  };
+
+  // Token weight map for a tab combines term frequency with IDF, and boosts
+  // title tokens over hostname tokens (titles describe the topic, hostnames
+  // describe the source).
+  const tabTokenWeights = (tabMeta, idf) => {
+    const weights = new Map();
+    const add = (tok, bump) => {
+      const w = (idf.get(tok) || 1) * bump;
+      weights.set(tok, (weights.get(tok) || 0) + w);
+    };
+    tabMeta.titleTokens.forEach((t) => add(t, 2));
+    tabMeta.hostTokens.forEach((t) => add(t, 1));
+    return weights;
+  };
+
+  // Weighted Jaccard similarity between two weight maps:
+  //   J_w(A, B) = sum_t min(A[t], B[t]) / sum_t max(A[t], B[t])
+  // This differs from unweighted Jaccard by caring HOW STRONGLY each token
+  // appears, not just whether it overlaps. Distinctive shared tokens dominate.
+  const weightedJaccard = (a, b) => {
+    if (a.size === 0 || b.size === 0) return 0;
+    let num = 0;
+    let den = 0;
+    const seen = new Set();
+    a.forEach((wa, tok) => {
+      const wb = b.get(tok) || 0;
+      num += Math.min(wa, wb);
+      den += Math.max(wa, wb);
+      seen.add(tok);
+    });
+    b.forEach((wb, tok) => {
+      if (seen.has(tok)) return;
+      den += wb; // min with missing is 0, contributes nothing to num
+    });
+    return den === 0 ? 0 : num / den;
   };
 
   const prettifyLabel = (raw) => {
@@ -1598,25 +1681,47 @@
       .join(" ");
   };
 
-  const nameFuzzyCluster = (clusterTabs, meta) => {
-    // Tally tokens across the cluster, weighting title tokens higher than
-    // hostname tokens (titles are more descriptive of topic).
-    const freq = new Map();
-    const bump = (tok, weight) => freq.set(tok, (freq.get(tok) || 0) + weight);
+  // Pick a label that's (a) shared by a meaningful fraction of the cluster,
+  // and (b) distinctive in the batch (high IDF). Prefers bigrams slightly
+  // over unigrams when both score similarly — they tend to read better.
+  const nameFuzzyCluster = (clusterTabs, meta, idf) => {
+    const minSupport = Math.max(2, Math.ceil(clusterTabs.length * 0.4));
+
+    const candidates = new Map(); // token -> { count, score, isBigram }
     for (const tab of clusterTabs) {
       const m = meta.get(tab);
       if (!m) continue;
-      m.titleTokens.forEach((t) => bump(t, 2));
-      m.hostTokens.forEach((t) => bump(t, 1));
+
+      const seenInTab = new Set();
+      const bump = (tok, weight, isBigram) => {
+        if (seenInTab.has(tok)) return;
+        seenInTab.add(tok);
+        const idfWeight = idf.get(tok) || 1;
+        const entry =
+          candidates.get(tok) || { count: 0, score: 0, isBigram };
+        entry.count++;
+        entry.score += idfWeight * weight;
+        candidates.set(tok, entry);
+      };
+      m.titleBigrams.forEach((t) => bump(t, 3, true));
+      m.titleUnigrams.forEach((t) => bump(t, 2, false));
+      m.hostTokens.forEach((t) => bump(t, 1, false));
     }
 
-    const ranked = [...freq.entries()]
-      .filter(([, c]) => c >= Math.max(2, Math.floor(clusterTabs.length * 0.4)))
-      .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length);
+    const ranked = [...candidates.entries()]
+      .filter(([, e]) => e.count >= minSupport)
+      .sort((a, b) => {
+        // Primary: score descending
+        if (b[1].score !== a[1].score) return b[1].score - a[1].score;
+        // Tiebreak 1: bigrams first (usually more descriptive)
+        if (a[1].isBigram !== b[1].isBigram) return a[1].isBigram ? -1 : 1;
+        // Tiebreak 2: longer token wins
+        return b[0].length - a[0].length;
+      });
 
     if (ranked.length) return prettifyLabel(ranked[0][0]);
 
-    // Fallback: most common hostname in cluster.
+    // Fallback: most common hostname in the cluster.
     const hostCount = new Map();
     clusterTabs.forEach((tab) => {
       const h = meta.get(tab)?.host;
@@ -1633,8 +1738,13 @@
     const meta = new Map();
     validTabs.forEach((tab) => meta.set(tab, tokenizeTab(tab)));
 
-    // 1. Seed by hostname.
-    const clusters = new Map(); // hostKey -> [tabs]
+    const idf = computeIDF(meta);
+    const tabWeights = new Map();
+    validTabs.forEach((tab) => tabWeights.set(tab, tabTokenWeights(meta.get(tab), idf)));
+
+    // 1. Seed clusters by hostname — tabs on the same host are almost
+    //    always related, so this is a strong prior.
+    const clusters = new Map();
     const noHost = [];
     validTabs.forEach((tab) => {
       const host = meta.get(tab).host;
@@ -1643,24 +1753,34 @@
       clusters.get(host).push(tab);
     });
 
-    // 2. Merge clusters by Jaccard token similarity.
     const clusterList = [...clusters.values()];
     if (noHost.length) clusterList.push(noHost);
 
-    const clusterTokens = clusterList.map((tabs) => {
-      const s = new Set();
-      tabs.forEach((tab) => meta.get(tab).allTokens.forEach((t) => s.add(t)));
-      return s;
-    });
+    // Aggregate token-weight maps per cluster by summing each member's map.
+    const buildClusterWeights = (tabs) => {
+      const agg = new Map();
+      tabs.forEach((tab) => {
+        const w = tabWeights.get(tab);
+        w?.forEach((v, k) => agg.set(k, (agg.get(k) || 0) + v));
+      });
+      return agg;
+    };
+    const clusterWeights = clusterList.map(buildClusterWeights);
 
+    // 2. Greedy-merge clusters whose weighted-Jaccard similarity crosses
+    //    the threshold. Uses a simple pass — O(n^2) in cluster count, which
+    //    is fine since cluster count << tab count.
     const mergedInto = new Array(clusterList.length).fill(-1);
     for (let i = 0; i < clusterList.length; i++) {
       if (mergedInto[i] !== -1) continue;
       for (let j = i + 1; j < clusterList.length; j++) {
         if (mergedInto[j] !== -1) continue;
-        if (jaccard(clusterTokens[i], clusterTokens[j]) >= FUZZY_CLUSTER_THRESHOLD) {
+        const sim = weightedJaccard(clusterWeights[i], clusterWeights[j]);
+        if (sim >= FUZZY_CLUSTER_THRESHOLD) {
           clusterList[i].push(...clusterList[j]);
-          clusterTokens[j].forEach((t) => clusterTokens[i].add(t));
+          clusterWeights[j].forEach((v, k) =>
+            clusterWeights[i].set(k, (clusterWeights[i].get(k) || 0) + v)
+          );
           mergedInto[j] = i;
         }
       }
@@ -1671,13 +1791,20 @@
     clusterList.forEach((tabs, idx) => {
       if (mergedInto[idx] !== -1) return;
       if (tabs.length < 2) return;
-      let label = nameFuzzyCluster(tabs, meta);
-      // Avoid label collisions with existing groups that contain different tabs
+      let label = nameFuzzyCluster(tabs, meta, idf);
       while (finalGroups[label]) label = `${label} 2`;
       finalGroups[label] = tabs;
     });
 
     return consolidateSimilarGroupNames(finalGroups, existingNames);
+  };
+
+  // Marker class on <html> while a sort is in-flight. Styled in
+  // userChrome.css with a subtle opacity pulse on all tabs so the user
+  // gets passive feedback without a modal/toast.
+  const SORT_IN_PROGRESS_CLASS = "tidy-tabs-sorting";
+  const setSortingVisualState = (on) => {
+    document.documentElement.classList.toggle(SORT_IN_PROGRESS_CLASS, !!on);
   };
 
   // --- Main Sorting Function ---
@@ -1689,6 +1816,7 @@
   const sortTabsByTopic = async (useFolders = false) => {
     if (isSorting) return;
     isSorting = true;
+    setSortingVisualState(true);
 
     let separatorsToSort = [];
     try {
@@ -2024,6 +2152,7 @@
       if (isPlayingFailureAnimation) {
         setTimeout(() => {
           isSorting = false;
+          setSortingVisualState(false);
           cleanupAnimation();
           if (separatorsToSort.length > 0) {
             batchDOMUpdates([
@@ -2033,21 +2162,11 @@
                 }),
             ]);
           }
-          setTimeout(() => {
-            batchDOMUpdates([
-              () => {
-                if (typeof gBrowser !== "undefined" && gBrowser.tabs) {
-                  Array.from(gBrowser.tabs).forEach((tab) => {
-                    if (tab?.isConnected) tab.classList.remove("tab-is-sorting");
-                  });
-                }
-              },
-            ]);
-          }, 500);
         }, CONFIG.FAILURE_PULSE_DURATION * CONFIG.FAILURE_PULSE_COUNT + 300);
       } else {
         setTimeout(() => {
           isSorting = false;
+          setSortingVisualState(false);
           cleanupAnimation();
           if (separatorsToSort.length > 0) {
             batchDOMUpdates([
@@ -2057,17 +2176,6 @@
                 }),
             ]);
           }
-          setTimeout(() => {
-            batchDOMUpdates([
-              () => {
-                if (typeof gBrowser !== "undefined" && gBrowser.tabs) {
-                  Array.from(gBrowser.tabs).forEach((tab) => {
-                    if (tab?.isConnected) tab.classList.remove("tab-is-sorting");
-                  });
-                }
-              },
-            ]);
-          }, 300);
         }, 800);
       }
     }
@@ -2111,16 +2219,17 @@
 
   const TIDY_TABS_MENU_ITEM_CLASS = "tidy-tabs-menuitem";
 
-  // Lucide icons with explicit stroke color (not context-dependent) so they
-  // render regardless of the host popup's styling. `#9a9a9a` looks neutral
-  // against both light and dark menus.
+  // Lucide icons. `stroke="context-stroke"` lets the CSS
+  // `-moz-context-properties: stroke` declaration in userChrome.css drive
+  // the color (currently `light-dark(#555, #d0d0d0)`), so the icon reads
+  // naturally on both light and dark menus.
   const TIDY_TABS_ICON_SVGS = {
     // layers
     groups:
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`,
     // folder-tree
     folders:
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>`,
   };
 
   const svgToDataURI = (svg) => {
@@ -2437,23 +2546,6 @@
     eventListenersAdded = true;
   }
 
-  // --- Debounce Utility (to prevent rapid firing) ---
-  function debounce(func, wait) {
-    if (typeof func !== "function" || typeof wait !== "number") {
-      return () => {};
-    }
-
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-    };
-  }
-
   // --- Cleanup Function ---
   const cleanup = () => {
     try {
@@ -2465,6 +2557,7 @@
 
       // Reset state
       isSorting = false;
+      setSortingVisualState(false);
       eventListenersAdded = false;
       treeConnectors?.destroy?.();
 
