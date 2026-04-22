@@ -167,8 +167,9 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  margin: 0 4px 2px 4px !important;
-  min-height: 18px;
+  margin: 4px 4px 0 4px !important;
+  min-height: 22px;
+  order: 999;
 
   & #sort-button {
     appearance: none !important;
@@ -191,8 +192,8 @@
     fill: currentColor !important;
 
     & .broom-icon {
-      width: 10px !important;
-      height: 10px !important;
+      width: 14px !important;
+      height: 14px !important;
       transition: transform 0.15s ease-in-out;
       transform: translateY(0px);
       fill: currentColor !important;

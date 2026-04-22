@@ -16,6 +16,7 @@
     CONSOLIDATION_DISTANCE_THRESHOLD: 2,
     EMBEDDING_BATCH_SIZE: 5,
     EXISTING_GROUP_BOOST: 0.1, // Boost similarity score for existing groups to prefer them
+    ROOT_FOLDER_LABEL: "Tidy Tabs",
   };
 
   // --- Globals & State ---
@@ -202,6 +203,41 @@
       );
       return null;
     }
+  };
+
+  const findRootTidyFolder = (workspaceId) => {
+    if (!workspaceId) return null;
+    const safeLabel = CONFIG.ROOT_FOLDER_LABEL.replace(/\\/g, "\\\\").replace(
+      /"/g,
+      '\\"'
+    );
+    const selector = `zen-folder[label="${safeLabel}"][zen-workspace-id="${workspaceId}"]`;
+    return Array.from(document.querySelectorAll(selector)).find(
+      (folder) => folder?.isConnected && !folder?.group?.isZenFolder
+    );
+  };
+
+  const findSubfolderByLabel = (parentFolder, label) => {
+    if (!parentFolder || !label) return null;
+    return parentFolder.allItems.find(
+      (item) => item?.isZenFolder && item.label === label
+    );
+  };
+
+  const ensureRootTidyFolder = (workspaceId) => {
+    let rootFolder = findRootTidyFolder(workspaceId);
+    if (rootFolder?.isConnected) {
+      return rootFolder;
+    }
+    if (typeof gZenFolders?.createFolder !== "function") {
+      return null;
+    }
+    rootFolder = gZenFolders.createFolder([], {
+      renameFolder: false,
+      label: CONFIG.ROOT_FOLDER_LABEL,
+      workspaceId,
+    });
+    return rootFolder?.isConnected ? rootFolder : null;
   };
 
   // --- AI Interaction ---
@@ -995,10 +1031,12 @@
       const existingGroupElementsMap = new Map();
       document.querySelectorAll(groupSelector).forEach((groupEl) => {
         const label = groupEl.getAttribute("label");
-        if (label) {
+        if (label && !groupEl?.group?.isZenFolder) {
           existingGroupElementsMap.set(label, groupEl);
         }
       });
+
+      const rootTidyFolder = ensureRootTidyFolder(currentWorkspaceId);
 
       // --- Process each final, consolidated group ---
       for (const topic in finalGroups) {
@@ -1061,88 +1099,46 @@
             );
           }
 
-          // Create group for any topic with tabs
+          // Create group/folder for any topic with tabs
           if (tabsForThisTopic.length > 0) {
-            const firstValidTabForGroup = tabsForThisTopic[0];
-            const groupOptions = {
-              label: topic,
-              insertBefore: firstValidTabForGroup,
-            };
             try {
-              const newGroup = gBrowser.addTabGroup(
-                tabsForThisTopic,
-                groupOptions
-              );
-              if (newGroup && newGroup.isConnected) {
-                existingGroupElementsMap.set(topic, newGroup);
+              let createdContainer = null;
 
-                // Try to set group color to average favicon if advanced-tab-groups is available
-                try {
-                  if (typeof newGroup._useFaviconColor === "function") {
-                    setTimeout(() => newGroup._useFaviconColor(), 500);
+              if (rootTidyFolder?.isConnected && typeof gZenFolders?.createFolder === "function") {
+                createdContainer = findSubfolderByLabel(rootTidyFolder, topic);
+
+                if (!createdContainer) {
+                  createdContainer = gZenFolders.createFolder([], {
+                    renameFolder: false,
+                    label: topic,
+                    workspaceId: currentWorkspaceId,
+                    insertAfter: rootTidyFolder.groupContainer.lastElementChild,
+                  });
+                  if (createdContainer?.isConnected) {
+                    rootTidyFolder.groupContainer.appendChild(createdContainer);
                   }
-                } catch (e) {
-                  // Silently ignore if advanced-tab-groups is not installed
+                }
+
+                if (createdContainer?.isConnected) {
+                  tabsForThisTopic.forEach((tab) => createdContainer.addTabs([tab]));
+                  existingGroupElementsMap.set(topic, createdContainer);
                 }
               } else {
-                console.warn(
-                  ` -> addTabGroup didn't return a connected element for "${topic}". Attempting fallback find.`
+                const firstValidTabForGroup = tabsForThisTopic[0];
+                const groupOptions = {
+                  label: topic,
+                  insertBefore: firstValidTabForGroup,
+                };
+                const newGroup = gBrowser.addTabGroup(
+                  tabsForThisTopic,
+                  groupOptions
                 );
-                // Use the CORRECT findGroupElement helper from clear script (needs to be added/updated)
-                const newGroupElFallback = findGroupElement(
-                  topic,
-                  currentWorkspaceId
-                );
-                if (newGroupElFallback && newGroupElFallback.isConnected) {
-                  existingGroupElementsMap.set(topic, newGroupElFallback);
-
-                  // Try to set group color to average favicon if advanced-tab-groups is available
-                  try {
-                    if (
-                      typeof newGroupElFallback._useFaviconColor === "function"
-                    ) {
-                      setTimeout(
-                        () => newGroupElFallback._useFaviconColor(),
-                        500
-                      );
-                    }
-                  } catch (e) {
-                    // Silently ignore if advanced-tab-groups is not installed
-                  }
-                } else {
-                  console.error(
-                    ` -> Failed to find the newly created group element for "${topic}" even with fallback.`
-                  );
+                if (newGroup?.isConnected) {
+                  existingGroupElementsMap.set(topic, newGroup);
                 }
               }
             } catch (e) {
-              console.error(
-                `Error calling gBrowser.addTabGroup for topic "${topic}":`,
-                e
-              );
-              const groupAfterError = findGroupElement(
-                topic,
-                currentWorkspaceId
-              );
-              if (groupAfterError && groupAfterError.isConnected) {
-                console.warn(
-                  ` -> Group "${topic}" might exist despite error. Found via findGroupElement.`
-                );
-                existingGroupElementsMap.set(topic, groupAfterError);
-
-                // Try to set group color to average favicon if advanced-tab-groups is available
-                try {
-                  if (typeof groupAfterError._useFaviconColor === "function") {
-                    setTimeout(() => groupAfterError._useFaviconColor(), 500);
-                  }
-                } catch (e) {
-                  // Silently ignore if advanced-tab-groups is not installed
-                }
-              } else {
-                console.error(
-                  ` -> Failed to find group "${topic}" after creation error.`
-                );
-              }
+              console.error(`Error creating container for topic "${topic}":`, e);
             }
           } else {
           }
@@ -1331,10 +1327,9 @@
       if (!tidyButtonAnchor) {
         tidyButtonAnchor = document.createXULElement("hbox");
         tidyButtonAnchor.setAttribute("class", "tidy-tabs-button-anchor");
-        workspacePinnedContainer.insertBefore(
-          tidyButtonAnchor,
-          workspacePinnedContainer.firstChild
-        );
+        workspacePinnedContainer.appendChild(tidyButtonAnchor);
+      } else if (workspacePinnedContainer.lastElementChild !== tidyButtonAnchor) {
+        workspacePinnedContainer.appendChild(tidyButtonAnchor);
       }
 
       if (!tidyButtonAnchor.querySelector("#sort-button")) {
