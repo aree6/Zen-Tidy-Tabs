@@ -5,10 +5,10 @@
 // ==/UserScript==
 
 (() => {
-  const CONFIG = {
+  const DEFAULT_CONFIG = {
     SIMILARITY_THRESHOLD: 0.45,
     GROUP_SIMILARITY_THRESHOLD: 0.65, // Lowered from 0.75 to be more inclusive for existing groups
-    MIN_TABS_FOR_SORT: 2, // This is the ammount of tabs for the button to show, not the ammount of tabs you need in a group
+    MIN_TABS_FOR_SORT: 0, // This is the ammount of tabs for the button to show, not the ammount of tabs you need in a group
     DEBOUNCE_DELAY: 250,
     ANIMATION_DURATION: 800,
     MAX_INIT_CHECKS: 50,
@@ -16,8 +16,102 @@
     CONSOLIDATION_DISTANCE_THRESHOLD: 2,
     EMBEDDING_BATCH_SIZE: 5,
     EXISTING_GROUP_BOOST: 0.1, // Boost similarity score for existing groups to prefer them
-    ROOT_FOLDER_LABEL: "Tidy Tabs",
+    REORDER_GROUPS_FIRST: true,
+    ENABLE_FAILURE_ANIMATION: true,
+    FAILURE_AMPLITUDE: 8,
+    FAILURE_FREQUENCY: 20,
+    FAILURE_SEGMENTS: 100,
+    FAILURE_PULSE_DURATION: 400,
+    FAILURE_PULSE_COUNT: 3,
+    ENABLE_CLEAR_BUTTON_PATCH: true,
+    TREE_CONNECTORS_ENABLED: true,
+    TREE_INCLUDE_RELATED_TABS: true,
+    TREE_REFRESH_ON_ANIMATIONS: true,
+    TREE_LINE_X: 6,
+    TREE_STROKE_WIDTH: 2,
+    TREE_BRANCH_RADIUS: 7,
+    TREE_OPACITY: 0.25,
+    TREE_BRANCH_OVERSHOOT: 0,
+    TREE_FOLDER_INDENT_PX: 12,
+    TREE_RELATED_CHILD_INDENT_PX: 20,
+    TREE_CONNECTOR_OFFSET_PX: -15,
   };
+
+  const PREF_BRANCH = "zen.tidytabs.";
+  const PREFS = {
+    SIMILARITY_THRESHOLD: ["double", "ai.similarity-threshold"],
+    GROUP_SIMILARITY_THRESHOLD: ["double", "ai.group-similarity-threshold"],
+    EXISTING_GROUP_BOOST: ["double", "ai.existing-group-boost"],
+    CONSOLIDATION_DISTANCE_THRESHOLD: ["int", "group.consolidation-distance-threshold"],
+    EMBEDDING_BATCH_SIZE: ["int", "performance.embedding-batch-size"],
+    DEBOUNCE_DELAY: ["int", "performance.debounce-delay"],
+    MAX_INIT_CHECKS: ["int", "performance.max-init-checks"],
+    INIT_CHECK_INTERVAL: ["int", "performance.init-check-interval"],
+    MIN_TABS_FOR_SORT: ["int", "ui.min-tabs-for-sort-button"],
+    REORDER_GROUPS_FIRST: ["bool", "ui.reorder-groups-first"],
+    ENABLE_FAILURE_ANIMATION: ["bool", "ui.enable-failure-animation"],
+    FAILURE_AMPLITUDE: ["int", "ui.failure-animation.amplitude"],
+    FAILURE_FREQUENCY: ["int", "ui.failure-animation.frequency"],
+    FAILURE_SEGMENTS: ["int", "ui.failure-animation.segments"],
+    FAILURE_PULSE_DURATION: ["int", "ui.failure-animation.pulse-duration"],
+    FAILURE_PULSE_COUNT: ["int", "ui.failure-animation.pulse-count"],
+    ENABLE_CLEAR_BUTTON_PATCH: ["bool", "behavior.patch-clear-button"],
+    TREE_CONNECTORS_ENABLED: ["bool", "tree.enabled"],
+    TREE_INCLUDE_RELATED_TABS: ["bool", "tree.include-related-tabs"],
+    TREE_REFRESH_ON_ANIMATIONS: ["bool", "tree.refresh-on-animations"],
+    TREE_LINE_X: ["int", "tree.line-x"],
+    TREE_STROKE_WIDTH: ["int", "tree.stroke-width"],
+    TREE_BRANCH_RADIUS: ["int", "tree.branch-radius"],
+    TREE_OPACITY: ["double", "tree.opacity"],
+    TREE_BRANCH_OVERSHOOT: ["int", "tree.branch-overshoot"],
+    TREE_FOLDER_INDENT_PX: ["int", "tree.folder-indent-px"],
+    TREE_RELATED_CHILD_INDENT_PX: ["int", "tree.related-child-indent-px"],
+    TREE_CONNECTOR_OFFSET_PX: ["int", "tree.connector-offset-px"],
+  };
+
+  const services =
+    globalThis.Services ??
+    ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
+      .Services;
+
+  const getPrefValue = (type, fullPrefName, fallbackValue) => {
+    try {
+      if (!services?.prefs?.prefHasUserValue(fullPrefName)) {
+        return fallbackValue;
+      }
+      if (type === "bool") {
+        return services.prefs.getBoolPref(fullPrefName, fallbackValue);
+      }
+      if (type === "int") {
+        return services.prefs.getIntPref(fullPrefName, fallbackValue);
+      }
+      if (type === "double") {
+        if (typeof services.prefs.getFloatPref === "function") {
+          return services.prefs.getFloatPref(fullPrefName, fallbackValue);
+        }
+        const numericString = services.prefs.getStringPref(
+          fullPrefName,
+          `${fallbackValue}`
+        );
+        const parsed = Number.parseFloat(numericString);
+        return Number.isFinite(parsed) ? parsed : fallbackValue;
+      }
+    } catch (error) {
+      console.warn(`[TidyTabs] Failed reading pref ${fullPrefName}:`, error);
+    }
+    return fallbackValue;
+  };
+
+  const loadRuntimeConfig = () => {
+    const mergedConfig = { ...DEFAULT_CONFIG };
+    Object.entries(PREFS).forEach(([key, [type, prefSuffix]]) => {
+      const prefName = `${PREF_BRANCH}${prefSuffix}`;
+      mergedConfig[key] = getPrefValue(type, prefName, DEFAULT_CONFIG[key]);
+    });
+    return mergedConfig;
+  };
+
+  const CONFIG = loadRuntimeConfig();
 
   // --- Globals & State ---
   let isSorting = false;
@@ -205,40 +299,579 @@
     }
   };
 
-  const findRootTidyFolder = (workspaceId) => {
-    if (!workspaceId) return null;
-    const safeLabel = CONFIG.ROOT_FOLDER_LABEL.replace(/\\/g, "\\\\").replace(
-      /"/g,
-      '\\"'
-    );
+  const findTopLevelFolderByLabel = (label, workspaceId) => {
+    if (!label || !workspaceId) return null;
+    const safeLabel = label.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     const selector = `zen-folder[label="${safeLabel}"][zen-workspace-id="${workspaceId}"]`;
     return Array.from(document.querySelectorAll(selector)).find(
       (folder) => folder?.isConnected && !folder?.group?.isZenFolder
     );
   };
 
-  const findSubfolderByLabel = (parentFolder, label) => {
-    if (!parentFolder || !label) return null;
-    return parentFolder.allItems.find(
-      (item) => item?.isZenFolder && item.label === label
-    );
+  // --- Folder Tree Connectors ---
+  const TREE_SCHEDULE_EVENTS = new Set([
+    "TabGroupExpand",
+    "TabGroupCollapse",
+    "TabGrouped",
+    "TabUngrouped",
+    "FolderGrouped",
+    "FolderUngrouped",
+    "TabSelect",
+    "TabMove",
+    "TabOpen",
+    "TabClose",
+    "TabAttrModified",
+  ]);
+
+  const ensureTreeConnectorStyles = () => {
+    const styleId = "tidy-tabs-tree-connectors-style";
+    const existingStyle = document.getElementById(styleId);
+    if (existingStyle) {
+      existingStyle.textContent = `
+        zen-folder > .tab-group-container {
+          margin-inline-start: ${CONFIG.TREE_FOLDER_INDENT_PX}px !important;
+        }
+
+        :root[zen-sidebar-expanded="true"] zen-folder > .tab-group-container,
+        .zen-related-group-container {
+          position: relative;
+        }
+
+        .tree-connector {
+          position: absolute;
+          top: 0;
+          left: ${CONFIG.TREE_CONNECTOR_OFFSET_PX}px;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 0;
+          will-change: contents;
+        }
+
+        tab.zen-is-related-parent {
+          overflow: visible !important;
+        }
+
+        tab.zen-is-related-parent > .tab-stack {
+          position: relative;
+          z-index: 1;
+        }
+
+        tab.zen-is-related-child > .tab-stack {
+          margin-inline-start: ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px !important;
+          width: calc(100% - ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px) !important;
+        }
+      `;
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      zen-folder > .tab-group-container {
+        margin-inline-start: ${CONFIG.TREE_FOLDER_INDENT_PX}px !important;
+      }
+
+      :root[zen-sidebar-expanded="true"] zen-folder > .tab-group-container,
+      .zen-related-group-container {
+        position: relative;
+      }
+
+      .tree-connector {
+        position: absolute;
+        top: 0;
+        left: ${CONFIG.TREE_CONNECTOR_OFFSET_PX}px;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        will-change: contents;
+      }
+
+      tab.zen-is-related-parent {
+        overflow: visible !important;
+      }
+
+      tab.zen-is-related-parent > .tab-stack {
+        position: relative;
+        z-index: 1;
+      }
+
+      tab.zen-is-related-child > .tab-stack {
+        margin-inline-start: ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px !important;
+        width: calc(100% - ${CONFIG.TREE_RELATED_CHILD_INDENT_PX}px) !important;
+      }
+    `;
+    document.documentElement.appendChild(style);
   };
 
-  const ensureRootTidyFolder = (workspaceId) => {
-    let rootFolder = findRootTidyFolder(workspaceId);
-    if (rootFolder?.isConnected) {
+  class TidyTabsTreeConnectors {
+    constructor() {
+      this.SVG_NS = "http://www.w3.org/2000/svg";
+      this.raf = null;
+      this.resizeObserver = null;
+      this.mutationObserver = null;
+      this.windowUtils = window.windowUtils;
+      this.isSetup = false;
+      this.boundHandleEvent = this.handleEvent.bind(this);
+    }
+
+    init() {
+      if (this.isSetup || !CONFIG.TREE_CONNECTORS_ENABLED) return;
+      try {
+        ensureTreeConnectorStyles();
+        this.setupEventListeners();
+        this.refreshVisualRelationships();
+        this.scheduleUpdate();
+        this.isSetup = true;
+      } catch (e) {
+        console.error("[TidyTabs][Tree] Failed to initialize", e);
+      }
+    }
+
+    destroy() {
+      if (!this.isSetup) return;
+
+      const events = [...TREE_SCHEDULE_EVENTS, "TabGroupCreate"];
+      events.forEach((eventName) => {
+        window.removeEventListener(eventName, this.boundHandleEvent);
+      });
+
+      const arrowScrollbox = document.getElementById("tabbrowser-arrowscrollbox");
+      if (arrowScrollbox && CONFIG.TREE_REFRESH_ON_ANIMATIONS) {
+        arrowScrollbox.removeEventListener("transitionend", this.boundHandleEvent, true);
+        arrowScrollbox.removeEventListener("animationend", this.boundHandleEvent, true);
+      }
+
+      if (this.mutationObserver) {
+        this.mutationObserver.disconnect();
+        this.mutationObserver = null;
+      }
+
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+        this.resizeObserver = null;
+      }
+
+      this.isSetup = false;
+    }
+
+    scheduleUpdate() {
+      if (!CONFIG.TREE_CONNECTORS_ENABLED || this.raf) return;
+      this.raf = requestAnimationFrame(() => {
+        this.raf = null;
+        this.onRefreshConnectors();
+      });
+    }
+
+    handleEvent(event) {
+      if (event.type === "TabGroupCreate") {
+        this.registerResizeObservers();
+        this.scheduleUpdate();
+        return;
+      }
+
+      if (
+        TREE_SCHEDULE_EVENTS.has(event.type) ||
+        event.type === "transitionend" ||
+        event.type === "animationend"
+      ) {
+        this.scheduleUpdate();
+      }
+    }
+
+    setupEventListeners() {
+      const events = [...TREE_SCHEDULE_EVENTS, "TabGroupCreate"];
+      events.forEach((eventName) => {
+        window.addEventListener(eventName, this.boundHandleEvent);
+      });
+
+      this.mutationObserver = new MutationObserver(() => this.scheduleUpdate());
+      this.mutationObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["zen-sidebar-expanded"],
+      });
+
+      const arrowScrollbox = document.getElementById("tabbrowser-arrowscrollbox");
+      if (arrowScrollbox) {
+        this.mutationObserver.observe(arrowScrollbox, {
+          attributes: true,
+          attributeFilter: ["active", "collapsedpinnedtabs"],
+          subtree: true,
+        });
+
+        if (CONFIG.TREE_REFRESH_ON_ANIMATIONS) {
+          arrowScrollbox.addEventListener("transitionend", this.boundHandleEvent, true);
+          arrowScrollbox.addEventListener("animationend", this.boundHandleEvent, true);
+        }
+      }
+
+      this.registerResizeObservers();
+    }
+
+    registerResizeObservers() {
+      if (!this.resizeObserver) {
+        this.resizeObserver = new ResizeObserver(() => this.scheduleUpdate());
+      }
+      const containers = document.querySelectorAll("zen-folder > .tab-group-container");
+      containers.forEach((container) => {
+        if (!container._tidyTreeObserved) {
+          container._tidyTreeObserved = true;
+          this.resizeObserver.observe(container);
+        }
+      });
+    }
+
+    observeTabElement(tab) {
+      if (!this.resizeObserver) {
+        this.resizeObserver = new ResizeObserver(() => this.scheduleUpdate());
+      }
+      if (!tab._tidyTreeObserved) {
+        tab._tidyTreeObserved = true;
+        this.resizeObserver.observe(tab);
+      }
+    }
+
+    isOwnedTabsInFolderEnabled() {
+      try {
+        return services.prefs.getBoolPref("zen.folders.owned-tabs-in-folder", false);
+      } catch {
+        return false;
+      }
+    }
+
+    onRefreshConnectors() {
+      if (!window.gBrowser || !CONFIG.TREE_CONNECTORS_ENABLED) return;
+
+      try {
+        const activeWorkspace = document.querySelector("zen-workspace[active='true']");
+        this.refreshVisualRelationships();
+
+        const folders = activeWorkspace
+          ? activeWorkspace.querySelectorAll("zen-folder")
+          : document.querySelectorAll("zen-folder");
+        folders.forEach((folder) => this.refreshFolderConnector(folder));
+
+        if (CONFIG.TREE_INCLUDE_RELATED_TABS) {
+          const relatedParents = activeWorkspace
+            ? activeWorkspace.querySelectorAll("tab.zen-is-related-parent")
+            : document.querySelectorAll("tab.zen-is-related-parent");
+          relatedParents.forEach((parent) => this.refreshRelatedTabConnector(parent));
+        }
+      } catch (e) {
+        console.error("[TidyTabs][Tree] Error during refresh", e);
+      }
+    }
+
+    refreshVisualRelationships() {
+      if (!window.gBrowser?.tabs) return;
+      if (!CONFIG.TREE_INCLUDE_RELATED_TABS || this.isOwnedTabsInFolderEnabled()) {
+        this.clearVisualNesting();
+        return;
+      }
+
+      const tabs = Array.from(window.gBrowser.tabs);
+      let activeParent = null;
+      let lineage = new Set();
+
+      tabs.forEach((tab) => {
+        tab.classList.remove("zen-is-related-child", "zen-is-related-parent");
+
+        const isBoundary =
+          tab.pinned ||
+          tab.group ||
+          tab.classList.contains("zen-tab-group-start");
+
+        if (isBoundary) {
+          activeParent = null;
+          lineage.clear();
+          return;
+        }
+
+        const activeParentFolder = activeParent ? this.getRootFolder(activeParent) : null;
+        const tabFolder = this.getRootFolder(tab);
+        const isInSameFolder = !!activeParentFolder && activeParentFolder === tabFolder;
+
+        const owner = tab.ownerTab || tab.openerTab;
+        const isDirectChild =
+          owner && activeParent && isInSameFolder && (owner === activeParent || lineage.has(owner));
+
+        if (isDirectChild) {
+          tab.classList.add("zen-is-related-child");
+          lineage.add(tab);
+          activeParent.classList.add("zen-is-related-parent");
+          this.observeTabElement(tab);
+          this.observeTabElement(activeParent);
+        } else {
+          activeParent = tab;
+          lineage.clear();
+        }
+      });
+
+      this.pruneStaleConnectors();
+    }
+
+    clearVisualNesting() {
+      const nodes = document.querySelectorAll(
+        ".zen-is-related-child, .zen-is-related-parent"
+      );
+      nodes.forEach((node) => {
+        node.classList.remove("zen-is-related-child", "zen-is-related-parent");
+        const connector = node.querySelector(":scope > .tree-connector");
+        if (connector?._isVisualConnector) {
+          connector.hidden = true;
+        }
+      });
+    }
+
+    pruneStaleConnectors() {
+      const connectors = document.querySelectorAll("tab > .tree-connector");
+      connectors.forEach((connector) => {
+        if (!connector._isVisualConnector) return;
+        const owner = connector.closest("tab");
+        if (!owner?.classList.contains("zen-is-related-parent")) {
+          connector.hidden = true;
+        }
+      });
+    }
+
+    getRootFolder(item) {
+      let rootFolder = null;
+      for (let node = item; node; node = node.parentElement) {
+        if (node.localName === "zen-folder") {
+          rootFolder = node;
+        }
+      }
       return rootFolder;
     }
-    if (typeof gZenFolders?.createFolder !== "function") {
-      return null;
+
+    getVisibleChildren(container, isParentCollapsed = false) {
+      const folder = container.closest("zen-folder, tab-group");
+      const items = folder?.allItems || [];
+      if (!items.length) return [];
+
+      const result = [];
+      items.forEach((item) => {
+        if (item.offsetHeight <= 0) return;
+
+        if (window.gBrowser.isTabGroup(item)) {
+          if (item.hasAttribute("split-view-group")) {
+            result.push(item);
+            return;
+          }
+
+          if (item.isZenFolder) {
+            const rootMost = item.rootMostCollapsedFolder;
+            if (isParentCollapsed || (rootMost && rootMost !== item)) {
+              const subContainer = item.querySelector(":scope > .tab-group-container");
+              if (subContainer) {
+                result.push(...this.getVisibleChildren(subContainer, true));
+              }
+            } else {
+              result.push(item);
+            }
+          }
+        } else if (
+          window.gBrowser.isTab(item) &&
+          !item.classList.contains("zen-tab-group-start") &&
+          !item.classList.contains("pinned-tabs-container-separator")
+        ) {
+          result.push(item);
+        }
+      });
+
+      return result;
     }
-    rootFolder = gZenFolders.createFolder([], {
-      renameFolder: false,
-      label: CONFIG.ROOT_FOLDER_LABEL,
-      workspaceId,
-    });
-    return rootFolder?.isConnected ? rootFolder : null;
-  };
+
+    refreshFolderConnector(folder) {
+      const container = folder.querySelector(":scope > .tab-group-container");
+      if (!container) return;
+
+      const rootMost = folder.rootMostCollapsedFolder;
+      if (rootMost && rootMost !== folder) {
+        const ghost = container.querySelector(":scope > .tree-connector");
+        if (ghost) {
+          ghost.hidden = true;
+          delete ghost._cachedPathElement;
+        }
+        return;
+      }
+
+      const isPinnedSection = folder.closest(".zen-workspace-pinned-tabs-section");
+      const workspace = folder.closest("zen-workspace");
+      const isPinnedCollapsed =
+        isPinnedSection && workspace?.hasAttribute("collapsedpinnedtabs");
+
+      if (isPinnedCollapsed) {
+        const connector = container.querySelector(":scope > .tree-connector");
+        if (connector) {
+          connector.hidden = true;
+          delete connector._cachedPathElement;
+        }
+        return;
+      }
+
+      const isExpanded =
+        document.documentElement.getAttribute("zen-sidebar-expanded") === "true";
+      const isCollapsed = folder.hasAttribute("collapsed");
+      const hasActive = folder.hasAttribute("has-active");
+      const isVisible = !isCollapsed || hasActive;
+
+      const children =
+        isExpanded && isVisible
+          ? this.getVisibleChildren(container, isCollapsed)
+          : [];
+
+      let connector = container.querySelector(":scope > .tree-connector");
+      if (!children.length) {
+        if (connector) {
+          connector.hidden = true;
+        }
+        return;
+      }
+
+      if (!connector) {
+        connector = document.createElement("div");
+        connector.className = "tree-connector";
+        container.prepend(connector);
+      }
+      connector.hidden = false;
+
+      this.performSVGUpdate(connector, children, false);
+    }
+
+    refreshRelatedTabConnector(parent) {
+      if (!CONFIG.TREE_INCLUDE_RELATED_TABS) return;
+
+      const descendants = [];
+      let sibling = parent.nextElementSibling;
+      while (sibling?.classList.contains("zen-is-related-child")) {
+        descendants.push(sibling);
+        sibling = sibling.nextElementSibling;
+      }
+
+      let connector = parent.querySelector(":scope > .tree-connector");
+      if (!descendants.length) {
+        if (connector?._isVisualConnector) connector.hidden = true;
+        return;
+      }
+
+      if (!connector) {
+        connector = document.createElement("div");
+        connector.className = "tree-connector";
+        connector._isVisualConnector = true;
+        parent.appendChild(connector);
+      }
+      connector.hidden = false;
+
+      this.performSVGUpdate(connector, descendants, true, parent);
+    }
+
+    performSVGUpdate(host, targets, isRelated, contextTab = null) {
+      const baseRect = this.windowUtils.getBoundsWithoutFlushing(host);
+      const points = targets
+        .map((item) => {
+          const targetElement = isRelated
+            ? item.querySelector(".tab-stack") || item
+            : item;
+          const itemRect = this.windowUtils.getBoundsWithoutFlushing(targetElement);
+
+          let tx = 0;
+          let ty = 0;
+          const inlineTransform = targetElement.style.transform;
+          const transformValue =
+            inlineTransform && inlineTransform !== "none" ? inlineTransform : null;
+
+          if (transformValue) {
+            const matrix = new window.DOMMatrix(transformValue);
+            tx = matrix.m41;
+            ty = matrix.m42;
+          } else if (!inlineTransform) {
+            const computed = window.getComputedStyle(targetElement).transform;
+            if (computed && computed !== "none") {
+              const matrix = new window.DOMMatrix(computed);
+              tx = matrix.m41;
+              ty = matrix.m42;
+            }
+          }
+
+          let x = itemRect.left - tx - baseRect.left + CONFIG.TREE_BRANCH_OVERSHOOT;
+          let y = itemRect.top - ty - baseRect.top;
+
+          if (!isRelated) {
+            if (item.isZenFolder) {
+              const label = item.querySelector(":scope > .tab-group-label-container");
+              if (label) y += label.offsetHeight / 2;
+            } else if (window.gBrowser.isTabGroup(item)) {
+              const tab = item.querySelector("tab");
+              if (tab) {
+                const tabRect = this.windowUtils.getBoundsWithoutFlushing(tab);
+                y = tabRect.top - ty - baseRect.top + tab.offsetHeight / 2;
+              } else {
+                y += item.offsetHeight / 2;
+              }
+            } else {
+              y += item.offsetHeight / 2;
+            }
+          } else {
+            y += targetElement.offsetHeight / 2;
+          }
+
+          return {
+            y,
+            x,
+            r: Math.min(CONFIG.TREE_BRANCH_RADIUS, Math.max(0, x - CONFIG.TREE_LINE_X)),
+          };
+        })
+        .filter((point) => point.y > 1);
+
+      if (!points.length) {
+        host.hidden = true;
+        return;
+      }
+
+      const last = points[points.length - 1];
+      const trunkTerminateY = last.y - last.r;
+      if (trunkTerminateY < 0) return;
+
+      const pathStart = isRelated && contextTab ? contextTab.offsetHeight / 2 : 0;
+      let pathData = `M ${CONFIG.TREE_LINE_X} ${pathStart} L ${CONFIG.TREE_LINE_X} ${trunkTerminateY}`;
+      points.forEach(({ y, x, r }) => {
+        pathData += ` M ${CONFIG.TREE_LINE_X} ${y - r} A ${r} ${r} 0 0 0 ${CONFIG.TREE_LINE_X + r} ${y} L ${x} ${y}`;
+      });
+
+      let path = host._cachedPathElement;
+      if (!path) {
+        path = document.createElementNS(this.SVG_NS, "path");
+        const svg = document.createElementNS(this.SVG_NS, "svg");
+        svg.setAttribute("width", "100%");
+        svg.setAttribute("height", "100%");
+        svg.style.position = "absolute";
+        svg.style.top = "0";
+        svg.style.left = "0";
+        svg.style.overflow = "visible";
+        svg.style.pointerEvents = "none";
+
+        const group = document.createElementNS(this.SVG_NS, "g");
+        group.setAttribute("opacity", `${CONFIG.TREE_OPACITY}`);
+        group.setAttribute("stroke", "currentColor");
+        group.setAttribute("stroke-width", `${CONFIG.TREE_STROKE_WIDTH}`);
+        group.setAttribute("fill", "none");
+        group.setAttribute("stroke-linecap", "round");
+
+        group.appendChild(path);
+        svg.appendChild(group);
+        host.replaceChildren(svg);
+        host._cachedPathElement = path;
+      }
+
+      if (path.getAttribute("d") !== pathData) {
+        path.setAttribute("d", pathData);
+      }
+    }
+  }
+
+  let treeConnectors = null;
 
   // --- AI Interaction ---
 
@@ -749,11 +1382,11 @@
       const pathElement = activeSeparator?.querySelector("#separator-path");
 
       if (pathElement) {
-        const maxAmplitude = 8; // Much higher amplitude for spiky effect
-        const frequency = 20; // Higher frequency for more spikes
-        const segments = 100; // More segments for sharper spikes
-        const pulseDuration = 400; // Duration of each pulse
-        const totalPulses = 3; // Number of pulses
+        const maxAmplitude = CONFIG.FAILURE_AMPLITUDE;
+        const frequency = CONFIG.FAILURE_FREQUENCY;
+        const segments = CONFIG.FAILURE_SEGMENTS;
+        const pulseDuration = CONFIG.FAILURE_PULSE_DURATION;
+        const totalPulses = CONFIG.FAILURE_PULSE_COUNT;
         let currentPulse = 0;
         let t = 0;
         let startTime = performance.now();
@@ -1015,8 +1648,9 @@
 
       if (sortingFailed) {
         console.log("[TabSort] Triggering failure animation");
-        // Trigger failure animation
-        startFailureAnimation();
+        if (CONFIG.ENABLE_FAILURE_ANIMATION) {
+          startFailureAnimation();
+        }
         return;
       }
 
@@ -1035,8 +1669,6 @@
           existingGroupElementsMap.set(label, groupEl);
         }
       });
-
-      const rootTidyFolder = ensureRootTidyFolder(currentWorkspaceId);
 
       // --- Process each final, consolidated group ---
       for (const topic in finalGroups) {
@@ -1104,23 +1736,23 @@
             try {
               let createdContainer = null;
 
-              if (rootTidyFolder?.isConnected && typeof gZenFolders?.createFolder === "function") {
-                createdContainer = findSubfolderByLabel(rootTidyFolder, topic);
+              if (typeof gZenFolders?.createFolder === "function") {
+                createdContainer = findTopLevelFolderByLabel(
+                  topic,
+                  currentWorkspaceId
+                );
 
                 if (!createdContainer) {
                   createdContainer = gZenFolders.createFolder([], {
                     renameFolder: false,
                     label: topic,
                     workspaceId: currentWorkspaceId,
-                    insertAfter: rootTidyFolder.groupContainer.lastElementChild,
                   });
-                  if (createdContainer?.isConnected) {
-                    rootTidyFolder.groupContainer.appendChild(createdContainer);
-                  }
                 }
 
                 if (createdContainer?.isConnected) {
-                  tabsForThisTopic.forEach((tab) => createdContainer.addTabs([tab]));
+                  createdContainer.addTabs(tabsForThisTopic);
+                  createdContainer.collapsed = false;
                   existingGroupElementsMap.set(topic, createdContainer);
                 }
               } else {
@@ -1147,6 +1779,9 @@
 
       // --- Reorder tabs: groups first, then ungrouped tabs ---
       try {
+        if (!CONFIG.REORDER_GROUPS_FIRST) {
+          return;
+        }
         const workspaceElement = gZenWorkspaces?.activeWorkspaceElement;
         
         if (workspaceElement?.tabsContainer) {
@@ -1214,8 +1849,12 @@
       console.error("Error during overall sorting process:", error);
     } finally {
       // If failure animation is playing, delay the cleanup
+      const sortButton = document.querySelector(
+        "#zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button"
+      );
+
       if (isPlayingFailureAnimation) {
-        // Wait for failure animation to complete (3 pulses * 400ms each + buffer)
+        // Wait for configured failure animation to complete plus a small buffer
         setTimeout(() => {
           isSorting = false;
           cleanupAnimation();
@@ -1246,41 +1885,50 @@
               },
             ]);
             updateButtonsVisibilityState();
+            if (sortButton?.isConnected) {
+              sortButton.classList.remove("sorting-active");
+            }
           }, 500);
-        }, 1500); // 3 pulses * 400ms + 300ms buffer
+        }, CONFIG.FAILURE_PULSE_DURATION * CONFIG.FAILURE_PULSE_COUNT + 300);
       } else {
-        isSorting = false;
-
-        // Cleanup animation
-        cleanupAnimation();
-
-        // Remove separator pulse indicator
-        if (separatorsToSort.length > 0) {
-          batchDOMUpdates([
-            () =>
-              separatorsToSort.forEach((sep) => {
-                if (sep?.isConnected) {
-                  sep.classList.remove("separator-is-sorting");
-                }
-              }),
-          ]);
-        }
-
-        // Remove tab loading indicators and update button visibility
+        // Keep animation running briefly to cover DOM/grouping updates
         setTimeout(() => {
-          batchDOMUpdates([
-            () => {
-              if (typeof gBrowser !== "undefined" && gBrowser.tabs) {
-                Array.from(gBrowser.tabs).forEach((tab) => {
-                  if (tab?.isConnected) {
-                    tab.classList.remove("tab-is-sorting");
+          isSorting = false;
+
+          // Cleanup animation
+          cleanupAnimation();
+
+          // Remove separator pulse indicator
+          if (separatorsToSort.length > 0) {
+            batchDOMUpdates([
+              () =>
+                separatorsToSort.forEach((sep) => {
+                  if (sep?.isConnected) {
+                    sep.classList.remove("separator-is-sorting");
                   }
-                });
-              }
-            },
-          ]);
-          updateButtonsVisibilityState();
-        }, 500);
+                }),
+            ]);
+          }
+
+          // Remove tab loading indicators and update button visibility
+          setTimeout(() => {
+            batchDOMUpdates([
+              () => {
+                if (typeof gBrowser !== "undefined" && gBrowser.tabs) {
+                  Array.from(gBrowser.tabs).forEach((tab) => {
+                    if (tab?.isConnected) {
+                      tab.classList.remove("tab-is-sorting");
+                    }
+                  });
+                }
+              },
+            ]);
+            updateButtonsVisibilityState();
+            if (sortButton?.isConnected) {
+              sortButton.classList.remove("sorting-active");
+            }
+          }, 300);
+        }, 800);
       }
     }
   };
@@ -1315,21 +1963,29 @@
       }
       // --- End SVG ---
 
-      // --- Create and Append Sort Button (anchored at workspace top-left) ---
-      const workspacePinnedContainer = separator.parentElement;
-      if (!workspacePinnedContainer) {
+      // --- Create and Append Sort Button in sidebar foot buttons ---
+      const sidebarFootButtons = document.querySelector("#zen-sidebar-foot-buttons");
+      if (!sidebarFootButtons) {
         return;
       }
 
-      let tidyButtonAnchor = workspacePinnedContainer.querySelector(
+      let tidyButtonAnchor = sidebarFootButtons.querySelector(
         ".tidy-tabs-button-anchor"
       );
       if (!tidyButtonAnchor) {
         tidyButtonAnchor = document.createXULElement("hbox");
         tidyButtonAnchor.setAttribute("class", "tidy-tabs-button-anchor");
-        workspacePinnedContainer.appendChild(tidyButtonAnchor);
-      } else if (workspacePinnedContainer.lastElementChild !== tidyButtonAnchor) {
-        workspacePinnedContainer.appendChild(tidyButtonAnchor);
+        const createNewBtn = sidebarFootButtons.querySelector("#zen-create-new-button");
+        if (createNewBtn) {
+          sidebarFootButtons.insertBefore(tidyButtonAnchor, createNewBtn);
+        } else {
+          sidebarFootButtons.appendChild(tidyButtonAnchor);
+        }
+      } else {
+        const createNewBtn = sidebarFootButtons.querySelector("#zen-create-new-button");
+        if (createNewBtn && tidyButtonAnchor.nextElementSibling !== createNewBtn) {
+          sidebarFootButtons.insertBefore(tidyButtonAnchor, createNewBtn);
+        }
       }
 
       if (!tidyButtonAnchor.querySelector("#sort-button")) {
@@ -1340,11 +1996,11 @@
                             command="cmd_zenSortTabs"
                             tooltiptext="Sort Tabs into Groups by Topic (AI)">
                             <hbox class="toolbarbutton-box" align="center">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28" class="broom-icon">
-                                    <g>
-                                        <path d="M19.9132 21.3765C19.8875 21.0162 19.6455 20.7069 19.3007 20.5993L7.21755 16.8291C6.87269 16.7215 6.49768 16.8384 6.27165 17.1202C5.73893 17.7845 4.72031 19.025 3.78544 19.9965C2.4425 21.392 3.01177 22.4772 4.66526 22.9931C4.82548 23.0431 5.78822 21.7398 6.20045 21.7398C6.51906 21.8392 6.8758 23.6828 7.26122 23.8031C7.87402 23.9943 8.55929 24.2081 9.27891 24.4326C9.59033 24.5298 10.2101 23.0557 10.5313 23.1559C10.7774 23.2327 10.7236 24.8834 10.9723 24.961C11.8322 25.2293 12.699 25.4997 13.5152 25.7544C13.868 25.8645 14.8344 24.3299 15.1637 24.4326C15.496 24.5363 15.191 26.2773 15.4898 26.3705C16.7587 26.7664 17.6824 27.0546 17.895 27.1209C19.5487 27.6369 20.6333 27.068 20.3226 25.1563C20.1063 23.8255 19.9737 22.2258 19.9132 21.3765Z" stroke="none"/>
-                                        <path d="M16.719 1.7134C17.4929-0.767192 20.7999 0.264626 20.026 2.74523C19.2521 5.22583 18.1514 8.75696 17.9629 9.36C17.7045 10.1867 16.1569 15.1482 15.899 15.9749L19.2063 17.0068C20.8597 17.5227 20.205 19.974 18.4514 19.4268L8.52918 16.331C6.87208 15.8139 7.62682 13.3938 9.28426 13.911L12.5916 14.9429C12.8495 14.1163 14.3976 9.15491 14.6555 8.32807C14.9135 7.50122 15.9451 4.19399 16.719 1.7134Z" stroke="none"/>
-                                    </g>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sort-button-icon">
+                                    <path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/>
+                                    <path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/>
+                                    <path d="M3 5a2 2 0 0 0 2 2h3"/>
+                                    <path d="M3 3v13a2 2 0 0 0 2 2h3"/>
                                 </svg>
                             </hbox>
                         </toolbarbutton>
@@ -1393,81 +2049,15 @@
       try {
         zenCommands.addEventListener("command", (event) => {
           if (event.target.id === "cmd_zenSortTabs") {
-            // Find the separator in the ACTIVE workspace
             const activeWorkspace = gZenWorkspaces?.activeWorkspaceElement;
-            const separator = activeWorkspace?.querySelector(
-              ".pinned-tabs-container-separator:not(.has-no-sortable-tabs)"
-            );
 
-            // Add brushing animation class to the sort button in the active workspace
-            const sortButton = activeWorkspace?.querySelector(
-              ".tidy-tabs-button-anchor #sort-button"
+            // Fade animation class while sorting is active
+            const sortButton = document.querySelector(
+              "#zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button"
             );
             if (sortButton) {
-              sortButton.classList.add("brushing");
-              // Remove class after animation completes
-              setTimeout(() => {
-                if (sortButton?.isConnected) {
-                  sortButton.classList.remove("brushing");
-                }
-              }, CONFIG.ANIMATION_DURATION);
+              sortButton.classList.add("sorting-active");
             }
-
-            // Prevent starting animation if already running
-            if (sortAnimationId !== null) return;
-
-            if (!separator) {
-              sortTabsByTopic(); // Still run sort even if animation fails
-              return;
-            }
-
-            // --- Start Animation logic ---
-            const pathElement = separator.querySelector("#separator-path");
-            if (pathElement) {
-              const maxAmplitude = 3;
-              const frequency = 8;
-              const segments = 50;
-              const growthDuration = 500;
-              let t = 0;
-              let startTime = performance.now();
-
-              function animateWaveLoop(timestamp) {
-                // Check if animation should continue
-                if (sortAnimationId === null) return;
-
-                const elapsedTime = timestamp - startTime;
-                const growthProgress = Math.min(
-                  elapsedTime / growthDuration,
-                  1
-                );
-                const currentAmplitude = maxAmplitude * growthProgress;
-
-                t += 0.5;
-
-                const points = [];
-                for (let i = 0; i <= segments; i++) {
-                  const x = (i / segments) * 100;
-                  const y =
-                    1 +
-                    currentAmplitude *
-                      Math.sin((x / (100 / frequency)) * 2 * Math.PI + t * 0.1);
-                  points.push(`${x.toFixed(2)},${y.toFixed(2)}`);
-                }
-
-                if (pathElement?.isConnected) {
-                  const pathData = "M" + points.join(" L");
-                  pathElement.setAttribute("d", pathData);
-                  sortAnimationId = requestAnimationFrame(animateWaveLoop);
-                } else {
-                  sortAnimationId = null;
-                }
-              }
-
-              sortAnimationId = requestAnimationFrame(animateWaveLoop);
-            }
-            // --- End Animation Logic ---
-
-            // Call the actual sorting logic AFTER starting animation
             sortTabsByTopic();
           }
         });
@@ -1500,6 +2090,7 @@
       }
       addSortButtonToAllSeparators();
       updateButtonsVisibilityState();
+      treeConnectors?.scheduleUpdate?.();
     };
 
     window.gZenWorkspaces.updateTabsContainers = function (...args) {
@@ -1515,11 +2106,16 @@
       }
       addSortButtonToAllSeparators();
       updateButtonsVisibilityState();
+      treeConnectors?.scheduleUpdate?.();
     };
   }
 
   // --- Patch Clear Button to Preserve Tab-Groups ---
   function patchClearButtonToPreserveGroups() {
+    if (!CONFIG.ENABLE_CLEAR_BUTTON_PATCH) {
+      return;
+    }
+
     if (typeof window.gZenWorkspaces === "undefined") {
       console.warn("[TidyTabs] gZenWorkspaces not available, cannot patch clear button");
       return;
@@ -1688,8 +2284,8 @@
           if (!separator?.isConnected) return;
 
           // Handle Tidy button visibility
-          const tidyButton = separator.parentElement?.querySelector(
-            ".tidy-tabs-button-anchor #sort-button"
+          const tidyButton = document.querySelector(
+            "#zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button"
           );
           if (tidyButton) {
             // Show button if:
@@ -1758,6 +2354,12 @@
       );
     });
 
+    events.forEach((eventName) => {
+      gBrowser.tabContainer.addEventListener(eventName, () => {
+        treeConnectors?.scheduleUpdate?.();
+      });
+    });
+
     // Listen to workspace changes
     if (typeof window.gZenWorkspaces !== "undefined") {
       window.addEventListener(
@@ -1798,6 +2400,7 @@
       // Reset state
       isSorting = false;
       eventListenersAdded = false;
+      treeConnectors?.destroy?.();
 
       console.log("Tab sort script cleanup completed");
     } catch (error) {
@@ -1827,6 +2430,8 @@
           addSortButtonToAllSeparators();
           setupgZenWorkspacesHooks();
           patchClearButtonToPreserveGroups(); // Patch the clear button
+          treeConnectors = new TidyTabsTreeConnectors();
+          treeConnectors.init();
           updateButtonsVisibilityState();
           addTabEventListeners();
 

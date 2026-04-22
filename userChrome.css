@@ -1,33 +1,20 @@
-@keyframes brush-sweep {
-  0% {
-    transform: rotate(0deg);
-  }
 
-  20% {
-    transform: rotate(-15deg);
-  }
-
-  40% {
-    transform: rotate(15deg);
-  }
-
-  60% {
-    transform: rotate(-15deg);
-  }
-
-  80% {
-    transform: rotate(15deg);
-  }
-
-  100% {
-    transform: rotate(0deg);
-  }
-}
 
 @keyframes loading-pulse-tab {
   0%,
   100% {
     opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes tidy-fade-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
   }
 
   50% {
@@ -80,35 +67,6 @@
 
     & .toolbarbutton-text {
       display: flex;
-    }
-
-    & .broom-icon {
-      width: 10px !important;
-      height: 10px !important;
-      transition: transform 0.15s ease-in-out;
-      transform: translateY(0px);
-      /* Use currentColor to match native clear button icon color */
-      fill: currentColor !important;
-    }
-
-    & .broom-icon path {
-      /* Use currentColor so it adapts to theme changes like native button */
-      fill: currentColor !important;
-    }
-
-    @starting-style {
-      & .broom-icon {
-        transform: translateY(-2px);
-      }
-    }
-
-    &:active:hover .broom-icon {
-      transform: translateY(2px);
-    }
-
-    &.brushing .broom-icon {
-      animation: brush-sweep 0.8s ease-in-out;
-      transform-origin: 50% 50%;
     }
 
     #navigator-toolbox[zen-has-implicit-hover="true"] & {
@@ -166,10 +124,11 @@
 .tidy-tabs-button-anchor {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  margin: 4px 4px 0 4px !important;
-  min-height: 22px;
-  order: 999;
+  justify-content: center;
+  margin: 0 !important;
+  min-height: unset;
+  order: 0;
+  flex: 0 0 auto;
 
   & #sort-button {
     appearance: none !important;
@@ -186,30 +145,13 @@
     overflow: hidden;
     pointer-events: none;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 4px !important;
     white-space: nowrap;
     -moz-context-properties: fill, fill-opacity !important;
     fill: currentColor !important;
 
-    & .broom-icon {
-      width: 14px !important;
-      height: 14px !important;
-      transition: transform 0.15s ease-in-out;
-      transform: translateY(0px);
-      fill: currentColor !important;
-    }
-
-    & .broom-icon path {
-      fill: currentColor !important;
-    }
-
-    &:active:hover .broom-icon {
-      transform: translateY(2px);
-    }
-
-    &.brushing .broom-icon {
-      animation: brush-sweep 0.8s ease-in-out;
-      transform-origin: 50% 50%;
+    &.sorting-active {
+      animation: tidy-fade-pulse 0.9s ease-in-out infinite;
     }
 
     #navigator-toolbox[zen-has-implicit-hover="true"] & {
@@ -246,6 +188,12 @@
       opacity: 1 !important;
     }
   }
+}
+
+#zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button {
+  visibility: visible;
+  opacity: 0.7;
+  pointer-events: auto;
 }
 
 #vertical-pinned-tabs-container

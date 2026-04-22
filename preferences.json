@@ -5,5 +5,239 @@
     "property": "browser.ml.enabled",
     "force": true,
     "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Tree Connectors: Enable",
+    "property": "zen.tidytabs.tree.enabled",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Tree Connectors: Include Related Tabs",
+    "property": "zen.tidytabs.tree.include-related-tabs",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Tree Connectors: Refresh on Animations",
+    "property": "zen.tidytabs.tree.refresh-on-animations",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Sort: Reorder Groups First",
+    "property": "zen.tidytabs.ui.reorder-groups-first",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Sort: Enable Failure Animation",
+    "property": "zen.tidytabs.ui.enable-failure-animation",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Behavior: Preserve Grouped Tabs on Clear",
+    "property": "zen.tidytabs.behavior.patch-clear-button",
+    "defaultValue": true
+  },
+  {
+    "type": "number",
+    "label": "AI: Similarity Threshold",
+    "property": "zen.tidytabs.ai.similarity-threshold",
+    "defaultValue": 0.45,
+    "min": 0,
+    "max": 1,
+    "step": 0.01
+  },
+  {
+    "type": "number",
+    "label": "AI: Existing Group Similarity",
+    "property": "zen.tidytabs.ai.group-similarity-threshold",
+    "defaultValue": 0.65,
+    "min": 0,
+    "max": 1,
+    "step": 0.01
+  },
+  {
+    "type": "number",
+    "label": "AI: Existing Group Boost",
+    "property": "zen.tidytabs.ai.existing-group-boost",
+    "defaultValue": 0.1,
+    "min": 0,
+    "max": 1,
+    "step": 0.01
+  },
+  {
+    "type": "number",
+    "label": "Grouping: Name Consolidation Distance",
+    "property": "zen.tidytabs.group.consolidation-distance-threshold",
+    "defaultValue": 2,
+    "min": 0,
+    "max": 10,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Performance: Embedding Batch Size",
+    "property": "zen.tidytabs.performance.embedding-batch-size",
+    "defaultValue": 5,
+    "min": 1,
+    "max": 20,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Performance: Debounce Delay (ms)",
+    "property": "zen.tidytabs.performance.debounce-delay",
+    "defaultValue": 250,
+    "min": 0,
+    "max": 2000,
+    "step": 25
+  },
+  {
+    "type": "number",
+    "label": "Performance: Max Init Checks",
+    "property": "zen.tidytabs.performance.max-init-checks",
+    "defaultValue": 50,
+    "min": 1,
+    "max": 500,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Performance: Init Check Interval (ms)",
+    "property": "zen.tidytabs.performance.init-check-interval",
+    "defaultValue": 100,
+    "min": 25,
+    "max": 2000,
+    "step": 25
+  },
+  {
+    "type": "number",
+    "label": "UI: Min Tabs for Sort Button",
+    "property": "zen.tidytabs.ui.min-tabs-for-sort-button",
+    "defaultValue": 0,
+    "min": 0,
+    "max": 50,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "UI: Failure Wave Amplitude",
+    "property": "zen.tidytabs.ui.failure-animation.amplitude",
+    "defaultValue": 8,
+    "min": 1,
+    "max": 24,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "UI: Failure Wave Frequency",
+    "property": "zen.tidytabs.ui.failure-animation.frequency",
+    "defaultValue": 20,
+    "min": 1,
+    "max": 60,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "UI: Failure Wave Segments",
+    "property": "zen.tidytabs.ui.failure-animation.segments",
+    "defaultValue": 100,
+    "min": 20,
+    "max": 300,
+    "step": 5
+  },
+  {
+    "type": "number",
+    "label": "UI: Failure Pulse Duration (ms)",
+    "property": "zen.tidytabs.ui.failure-animation.pulse-duration",
+    "defaultValue": 400,
+    "min": 100,
+    "max": 2000,
+    "step": 25
+  },
+  {
+    "type": "number",
+    "label": "UI: Failure Pulse Count",
+    "property": "zen.tidytabs.ui.failure-animation.pulse-count",
+    "defaultValue": 3,
+    "min": 1,
+    "max": 12,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Tree: Trunk X Position",
+    "property": "zen.tidytabs.tree.line-x",
+    "defaultValue": 6,
+    "min": 0,
+    "max": 30,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Tree: Stroke Width",
+    "property": "zen.tidytabs.tree.stroke-width",
+    "defaultValue": 2,
+    "min": 1,
+    "max": 6,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Tree: Branch Radius",
+    "property": "zen.tidytabs.tree.branch-radius",
+    "defaultValue": 7,
+    "min": 0,
+    "max": 24,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Tree: Connector Opacity",
+    "property": "zen.tidytabs.tree.opacity",
+    "defaultValue": 0.25,
+    "min": 0,
+    "max": 1,
+    "step": 0.05
+  },
+  {
+    "type": "number",
+    "label": "Tree: Branch Overshoot",
+    "property": "zen.tidytabs.tree.branch-overshoot",
+    "defaultValue": 0,
+    "min": -20,
+    "max": 20,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Tree: Folder Indent (px)",
+    "property": "zen.tidytabs.tree.folder-indent-px",
+    "defaultValue": 12,
+    "min": 0,
+    "max": 40,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Tree: Related Child Indent (px)",
+    "property": "zen.tidytabs.tree.related-child-indent-px",
+    "defaultValue": 20,
+    "min": 0,
+    "max": 60,
+    "step": 1
+  },
+  {
+    "type": "number",
+    "label": "Tree: Connector Offset (px)",
+    "property": "zen.tidytabs.tree.connector-offset-px",
+    "defaultValue": -15,
+    "min": -40,
+    "max": 10,
+    "step": 1
   }
 ]
