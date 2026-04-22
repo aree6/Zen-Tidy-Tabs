@@ -40,23 +40,18 @@
 
   & #sort-button {
     appearance: none !important;
-    opacity: 0;
-    visibility: collapse;
-    transition:
-      opacity 0.15s,
-      visibility 0.15s;
-    font-size: var(--zen-tidytabs-sort-font-size, 10px) !important;
+    opacity: var(--zen-tidytabs-sort-icon-opacity, 0.8);
+    transition: opacity 0.15s;
+    font-size: var(--zen-tidytabs-sort-font-size, 0.625rem) !important;
     font-weight: 500;
     gap: 2px;
     flex-shrink: 0;
     min-width: 0;
     overflow: hidden;
-    pointer-events: none;
+    cursor: pointer !important;
     margin: 0 !important;
     padding: 0 !important;
     white-space: nowrap;
-    /* Don't hardcode color - let it inherit from theme like native clear button */
-    /* Match native clear button context properties for icon color */
     -moz-context-properties: fill, fill-opacity !important;
     fill: currentColor !important;
 
@@ -70,14 +65,8 @@
     }
 
     & .sort-button-icon {
-      width: var(--zen-tidytabs-sort-icon-size, 24px) !important;
-      height: var(--zen-tidytabs-sort-icon-size, 24px) !important;
-      opacity: var(--zen-tidytabs-sort-icon-opacity, 1) !important;
-    }
-
-    #navigator-toolbox[zen-has-implicit-hover="true"] & {
-      visibility: visible;
-      opacity: 0.5;
+      width: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
+      height: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
     }
 
     &:hover {
@@ -94,19 +83,6 @@
       opacity: 0 !important;
       margin: 0 !important;
       padding: 0 !important;
-    }
-  }
-
-  &:hover {
-    & #sort-button {
-      visibility: visible;
-      opacity: 0.5;
-      pointer-events: auto;
-      cursor: pointer !important;
-    }
-
-    & #sort-button:hover {
-      opacity: 1 !important;
     }
   }
 
@@ -138,18 +114,15 @@
 
   & #sort-button {
     appearance: none !important;
-    opacity: 0;
-    visibility: collapse;
-    transition:
-      opacity 0.15s,
-      visibility 0.15s;
-    font-size: var(--zen-tidytabs-sort-font-size, 10px) !important;
+    opacity: var(--zen-tidytabs-sort-icon-opacity, 0.8);
+    transition: opacity 0.15s;
+    font-size: var(--zen-tidytabs-sort-font-size, 0.625rem) !important;
     font-weight: 500;
     gap: 2px;
     flex-shrink: 0;
     min-width: 0;
     overflow: hidden;
-    pointer-events: none;
+    cursor: pointer !important;
     margin: 0 !important;
     padding: 4px !important;
     white-space: nowrap;
@@ -157,18 +130,12 @@
     fill: currentColor !important;
 
     & .sort-button-icon {
-      width: var(--zen-tidytabs-sort-icon-size, 24px) !important;
-      height: var(--zen-tidytabs-sort-icon-size, 24px) !important;
-      opacity: var(--zen-tidytabs-sort-icon-opacity, 1) !important;
+      width: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
+      height: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
     }
 
     &.sorting-active {
       animation: tidy-fade-pulse 0.9s ease-in-out infinite;
-    }
-
-    #navigator-toolbox[zen-has-implicit-hover="true"] & {
-      visibility: visible;
-      opacity: 0.5;
     }
 
     &:hover {
@@ -187,30 +154,14 @@
       padding: 0 !important;
     }
   }
-
-  &:hover {
-    & #sort-button {
-      visibility: visible;
-      opacity: 0.5;
-      pointer-events: auto;
-      cursor: pointer !important;
-    }
-
-    & #sort-button:hover {
-      opacity: 1 !important;
-    }
-  }
 }
 
 #zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button {
-  visibility: visible;
-  opacity: 0.7;
-  pointer-events: auto;
+  opacity: var(--zen-tidytabs-sort-icon-opacity, 0.8);
 
   & .sort-button-icon {
-    width: var(--zen-tidytabs-sort-icon-size, 24px) !important;
-    height: var(--zen-tidytabs-sort-icon-size, 24px) !important;
-    opacity: var(--zen-tidytabs-sort-icon-opacity, 1) !important;
+    width: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
+    height: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
   }
 }
 
@@ -225,15 +176,6 @@
   gap: 0 !important;
 }
 
-.vertical-pinned-tabs-container-separator:hover svg {
-  width: calc(
-    100% -
-      (
-        100px *
-          (1 - var(--sort-button-hidden, 0))
-      )
-  ) !important;
-}
 
 .tab-is-sorting {
   & .tab-icon-image,

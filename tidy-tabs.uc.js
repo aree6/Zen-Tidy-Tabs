@@ -35,44 +35,22 @@
     TREE_FOLDER_INDENT_PX: 12,
     TREE_RELATED_CHILD_INDENT_PX: 20,
     TREE_CONNECTOR_OFFSET_PX: -15,
-    SORT_ICON_SIZE: 24,
-    SORT_ICON_OPACITY: 1,
-    SORT_BUTTON_FONT_SIZE: 10,
+    USE_ZEN_FOLDERS: true,
+    SORT_ICON_SIZE: "1.5rem",
+    SORT_ICON_OPACITY: 0.8,
+    SORT_BUTTON_FONT_SIZE: "0.625rem",
   };
 
   const PREF_BRANCH = "zen.tidytabs.";
   const PREFS = {
     SIMILARITY_THRESHOLD: ["double", "ai.similarity-threshold"],
-    GROUP_SIMILARITY_THRESHOLD: ["double", "ai.group-similarity-threshold"],
-    EXISTING_GROUP_BOOST: ["double", "ai.existing-group-boost"],
-    CONSOLIDATION_DISTANCE_THRESHOLD: ["int", "group.consolidation-distance-threshold"],
-    EMBEDDING_BATCH_SIZE: ["int", "performance.embedding-batch-size"],
-    DEBOUNCE_DELAY: ["int", "performance.debounce-delay"],
-    MAX_INIT_CHECKS: ["int", "performance.max-init-checks"],
-    INIT_CHECK_INTERVAL: ["int", "performance.init-check-interval"],
-    MIN_TABS_FOR_SORT: ["int", "ui.min-tabs-for-sort-button"],
-    REORDER_GROUPS_FIRST: ["bool", "ui.reorder-groups-first"],
+    USE_ZEN_FOLDERS: ["bool", "ui.use-zen-folders"],
     ENABLE_FAILURE_ANIMATION: ["bool", "ui.enable-failure-animation"],
-    FAILURE_AMPLITUDE: ["int", "ui.failure-animation.amplitude"],
-    FAILURE_FREQUENCY: ["int", "ui.failure-animation.frequency"],
-    FAILURE_SEGMENTS: ["int", "ui.failure-animation.segments"],
-    FAILURE_PULSE_DURATION: ["int", "ui.failure-animation.pulse-duration"],
-    FAILURE_PULSE_COUNT: ["int", "ui.failure-animation.pulse-count"],
     ENABLE_CLEAR_BUTTON_PATCH: ["bool", "behavior.patch-clear-button"],
     TREE_CONNECTORS_ENABLED: ["bool", "tree.enabled"],
-    TREE_INCLUDE_RELATED_TABS: ["bool", "tree.include-related-tabs"],
-    TREE_REFRESH_ON_ANIMATIONS: ["bool", "tree.refresh-on-animations"],
-    TREE_LINE_X: ["int", "tree.line-x"],
-    TREE_STROKE_WIDTH: ["int", "tree.stroke-width"],
-    TREE_BRANCH_RADIUS: ["int", "tree.branch-radius"],
-    TREE_OPACITY: ["double", "tree.opacity"],
-    TREE_BRANCH_OVERSHOOT: ["int", "tree.branch-overshoot"],
-    TREE_FOLDER_INDENT_PX: ["int", "tree.folder-indent-px"],
-    TREE_RELATED_CHILD_INDENT_PX: ["int", "tree.related-child-indent-px"],
-    TREE_CONNECTOR_OFFSET_PX: ["int", "tree.connector-offset-px"],
-    SORT_ICON_SIZE: ["int", "ui.sort-button.icon-size"],
+    SORT_ICON_SIZE: ["string", "ui.sort-button.icon-size"],
     SORT_ICON_OPACITY: ["double", "ui.sort-button.icon-opacity"],
-    SORT_BUTTON_FONT_SIZE: ["int", "ui.sort-button.font-size"],
+    SORT_BUTTON_FONT_SIZE: ["string", "ui.sort-button.font-size"],
   };
 
   const services =
@@ -103,6 +81,10 @@
           return `${fallbackValue}`;
         }
       };
+
+      if (type === "string") {
+        return readString();
+      }
 
       if (type === "bool") {
         if (prefType === PREF_BOOL) {
@@ -450,14 +432,21 @@
   // without reloading the script.
   const ensureSortButtonStyles = () => {
     const styleId = "tidy-tabs-sort-button-style";
-    const iconSize = Math.max(8, CONFIG.SORT_ICON_SIZE);
+    const iconSize =
+      typeof CONFIG.SORT_ICON_SIZE === "string" && CONFIG.SORT_ICON_SIZE.trim()
+        ? CONFIG.SORT_ICON_SIZE.trim()
+        : "1.5rem";
     const iconOpacity = Math.min(1, Math.max(0, CONFIG.SORT_ICON_OPACITY));
-    const fontSize = Math.max(6, CONFIG.SORT_BUTTON_FONT_SIZE);
+    const fontSize =
+      typeof CONFIG.SORT_BUTTON_FONT_SIZE === "string" &&
+      CONFIG.SORT_BUTTON_FONT_SIZE.trim()
+        ? CONFIG.SORT_BUTTON_FONT_SIZE.trim()
+        : "0.625rem";
     const css = `
       :root {
-        --zen-tidytabs-sort-icon-size: ${iconSize}px;
+        --zen-tidytabs-sort-icon-size: ${iconSize};
         --zen-tidytabs-sort-icon-opacity: ${iconOpacity};
-        --zen-tidytabs-sort-font-size: ${fontSize}px;
+        --zen-tidytabs-sort-font-size: ${fontSize};
       }
     `;
     let style = document.getElementById(styleId);
@@ -1807,7 +1796,7 @@
             try {
               let createdContainer = null;
 
-              if (typeof gZenFolders?.createFolder === "function") {
+              if (CONFIG.USE_ZEN_FOLDERS && typeof gZenFolders?.createFolder === "function") {
                 createdContainer = findTopLevelFolderByLabel(
                   topic,
                   currentWorkspaceId
