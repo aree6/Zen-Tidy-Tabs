@@ -8,7 +8,7 @@
   const CONFIG = {
     SIMILARITY_THRESHOLD: 0.45,
     GROUP_SIMILARITY_THRESHOLD: 0.65, // Lowered from 0.75 to be more inclusive for existing groups
-    MIN_TABS_FOR_SORT: 6, // This is the ammount of tabs for the button to show, not the ammount of tabs you need in a group
+    MIN_TABS_FOR_SORT: 2, // This is the ammount of tabs for the button to show, not the ammount of tabs you need in a group
     DEBOUNCE_DELAY: 250,
     ANIMATION_DURATION: 800,
     MAX_INIT_CHECKS: 50,
@@ -75,7 +75,8 @@
         tab.getAttribute("zen-workspace-id") === workspaceId;
       if (!isInCorrectWorkspace) return false;
 
-      const groupParent = tab.closest("tab-group");
+      const groupParent =
+        tab.group ?? tab.closest(":is(tab-group, zen-folder)");
       const isInGroup = !!groupParent;
 
       return (
@@ -372,7 +373,7 @@
     // Get existing groups in current workspace
     const existingWorkspaceGroups = new Map();
     if (currentWorkspaceId) {
-      const groupSelector = `tab-group:has(tab[zen-workspace-id="${currentWorkspaceId}"])`;
+      const groupSelector = `:is(tab-group, zen-folder):has(tab[zen-workspace-id="${currentWorkspaceId}"])`;
       document.querySelectorAll(groupSelector).forEach((groupEl) => {
         const label = groupEl.getAttribute("label");
         if (label) {
@@ -807,7 +808,7 @@
 
       // --- Step 1: Get ALL Existing Group Names for Context ---
       const allExistingGroupNames = new Set();
-      const groupSelector = `tab-group:has(tab[zen-workspace-id="${currentWorkspaceId}"])`;
+      const groupSelector = `:is(tab-group, zen-folder):has(tab[zen-workspace-id="${currentWorkspaceId}"])`;
 
       document.querySelectorAll(groupSelector).forEach((groupEl) => {
         const label = groupEl.getAttribute("label");
@@ -824,7 +825,8 @@
         includeEmpty: false,
         includeGlance: false,
       }).filter((tab) => {
-        const groupParent = tab.closest("tab-group");
+        const groupParent =
+          tab.group ?? tab.closest(":is(tab-group, zen-folder)");
         const isInGroupInCorrectWorkspace = groupParent
           ? groupParent.matches(groupSelector)
           : false;
@@ -1001,7 +1003,8 @@
       // --- Process each final, consolidated group ---
       for (const topic in finalGroups) {
         const tabsForThisTopic = finalGroups[topic].filter((t) => {
-          const groupParent = t.closest("tab-group");
+          const groupParent =
+            t.group ?? t.closest(":is(tab-group, zen-folder)");
           const isInGroupInCorrectWorkspace = groupParent
             ? groupParent.matches(groupSelector)
             : false;
@@ -1025,12 +1028,17 @@
               }
             }
             for (const tab of tabsForThisTopic) {
-              const groupParent = tab.closest("tab-group");
+              const groupParent =
+                tab.group ?? tab.closest(":is(tab-group, zen-folder)");
               const isInGroupInCorrectWorkspace = groupParent
                 ? groupParent.matches(groupSelector)
                 : false;
               if (tab && tab.isConnected && !isInGroupInCorrectWorkspace) {
-                gBrowser.moveTabToExistingGroup(tab, existingGroupElement);
+                if (existingGroupElement?.isZenFolder) {
+                  existingGroupElement.addTabs([tab]);
+                } else {
+                  gBrowser.moveTabToExistingGroup(tab, existingGroupElement);
+                }
               } else {
                 console.warn(
                   ` -> Tab "${
@@ -1311,10 +1319,25 @@
       }
       // --- End SVG ---
 
-      // --- Create and Append Sort Button (positioned before native clear button) ---
-      if (!separator.querySelector("#sort-button")) {
-        // Find the native clear button to position sort button before it
-        const nativeClearButton = separator.querySelector(".zen-workspace-close-unpinned-tabs-button");
+      // --- Create and Append Sort Button (anchored at workspace top-left) ---
+      const workspacePinnedContainer = separator.parentElement;
+      if (!workspacePinnedContainer) {
+        return;
+      }
+
+      let tidyButtonAnchor = workspacePinnedContainer.querySelector(
+        ".tidy-tabs-button-anchor"
+      );
+      if (!tidyButtonAnchor) {
+        tidyButtonAnchor = document.createXULElement("hbox");
+        tidyButtonAnchor.setAttribute("class", "tidy-tabs-button-anchor");
+        workspacePinnedContainer.insertBefore(
+          tidyButtonAnchor,
+          workspacePinnedContainer.firstChild
+        );
+      }
+
+      if (!tidyButtonAnchor.querySelector("#sort-button")) {
         const buttonFragment = window.MozXULElement.parseXULToFragment(`
                         <toolbarbutton
                             id="sort-button"
@@ -1333,12 +1356,7 @@
                     `);
         const buttonNode = buttonFragment.firstChild.cloneNode(true);
 
-        // Insert before native clear button if it exists, otherwise append
-        if (nativeClearButton) {
-          separator.insertBefore(buttonNode, nativeClearButton);
-        } else {
-          separator.appendChild(buttonNode);
-        }
+        tidyButtonAnchor.appendChild(buttonNode);
       } else {
       }
       // --- End Sort Button ---
@@ -1387,7 +1405,9 @@
             );
 
             // Add brushing animation class to the sort button in the active workspace
-            const sortButton = separator?.querySelector("#sort-button");
+            const sortButton = activeWorkspace?.querySelector(
+              ".tidy-tabs-button-anchor #sort-button"
+            );
             if (sortButton) {
               sortButton.classList.add("brushing");
               // Remove class after animation completes
@@ -1639,7 +1659,8 @@
     });
 
     for (const tab of allTabs) {
-      const groupParent = tab.closest("tab-group");
+      const groupParent =
+        tab.group ?? tab.closest(":is(tab-group, zen-folder)");
       const isInGroup = !!groupParent;
       const isSelected = tab.selected;
 
@@ -1672,7 +1693,9 @@
           if (!separator?.isConnected) return;
 
           // Handle Tidy button visibility
-          const tidyButton = separator.querySelector("#sort-button");
+          const tidyButton = separator.parentElement?.querySelector(
+            ".tidy-tabs-button-anchor #sort-button"
+          );
           if (tidyButton) {
             // Show button if:
             // 1. We have existing groups and any ungrouped tabs (even just 1)
