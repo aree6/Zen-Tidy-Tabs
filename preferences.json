@@ -8,12 +8,6 @@
   },
   {
     "type": "checkbox",
-    "label": "Grouping: Use Zen Folders",
-    "property": "zen.tidytabs.ui.use-zen-folders",
-    "defaultValue": true
-  },
-  {
-    "type": "checkbox",
     "label": "Tree Connectors: Enable",
     "property": "zen.tidytabs.tree.enabled",
     "defaultValue": true
@@ -32,30 +26,9 @@
   },
   {
     "type": "string",
-    "label": "AI: Similarity Threshold (0 - 1)",
+    "label": "AI: Similarity Threshold — lower = stricter / fewer groups, higher = looser / more groups (0-1)",
     "property": "zen.tidytabs.ai.similarity-threshold",
     "defaultValue": "0.45",
     "placeholder": "0.45"
-  },
-  {
-    "type": "string",
-    "label": "UI: Icon Size (CSS length, e.g. 1.5rem)",
-    "property": "zen.tidytabs.ui.sort-button.icon-size",
-    "defaultValue": "1.5rem",
-    "placeholder": "1.5rem"
-  },
-  {
-    "type": "string",
-    "label": "UI: Icon Opacity (0 - 1)",
-    "property": "zen.tidytabs.ui.sort-button.icon-opacity",
-    "defaultValue": "0.8",
-    "placeholder": "0.8"
-  },
-  {
-    "type": "string",
-    "label": "UI: Font Size (CSS length, e.g. 0.625rem)",
-    "property": "zen.tidytabs.ui.sort-button.font-size",
-    "defaultValue": "0.625rem",
-    "placeholder": "0.625rem"
   }
 ]

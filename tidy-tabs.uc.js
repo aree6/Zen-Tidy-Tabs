@@ -35,22 +35,14 @@
     TREE_FOLDER_INDENT_PX: 12,
     TREE_RELATED_CHILD_INDENT_PX: 20,
     TREE_CONNECTOR_OFFSET_PX: -15,
-    USE_ZEN_FOLDERS: true,
-    SORT_ICON_SIZE: "1.5rem",
-    SORT_ICON_OPACITY: 0.8,
-    SORT_BUTTON_FONT_SIZE: "0.625rem",
   };
 
   const PREF_BRANCH = "zen.tidytabs.";
   const PREFS = {
     SIMILARITY_THRESHOLD: ["double", "ai.similarity-threshold"],
-    USE_ZEN_FOLDERS: ["bool", "ui.use-zen-folders"],
     ENABLE_FAILURE_ANIMATION: ["bool", "ui.enable-failure-animation"],
     ENABLE_CLEAR_BUTTON_PATCH: ["bool", "behavior.patch-clear-button"],
     TREE_CONNECTORS_ENABLED: ["bool", "tree.enabled"],
-    SORT_ICON_SIZE: ["string", "ui.sort-button.icon-size"],
-    SORT_ICON_OPACITY: ["double", "ui.sort-button.icon-opacity"],
-    SORT_BUTTON_FONT_SIZE: ["string", "ui.sort-button.font-size"],
   };
 
   const services =
@@ -137,7 +129,6 @@
 
   // --- Globals & State ---
   let isSorting = false;
-  let sortButtonListenerAdded = false;
   let isPlayingFailureAnimation = false;
   let sortAnimationId = null;
   let eventListenersAdded = false;
@@ -426,38 +417,6 @@
     `;
     document.documentElement.appendChild(style);
   };
-
-  // Exposes the sort-button visual preferences as CSS variables so
-  // userChrome.css stays declarative and users can retune size/opacity
-  // without reloading the script.
-  const ensureSortButtonStyles = () => {
-    const styleId = "tidy-tabs-sort-button-style";
-    const iconSize =
-      typeof CONFIG.SORT_ICON_SIZE === "string" && CONFIG.SORT_ICON_SIZE.trim()
-        ? CONFIG.SORT_ICON_SIZE.trim()
-        : "1.5rem";
-    const iconOpacity = Math.min(1, Math.max(0, CONFIG.SORT_ICON_OPACITY));
-    const fontSize =
-      typeof CONFIG.SORT_BUTTON_FONT_SIZE === "string" &&
-      CONFIG.SORT_BUTTON_FONT_SIZE.trim()
-        ? CONFIG.SORT_BUTTON_FONT_SIZE.trim()
-        : "0.625rem";
-    const css = `
-      :root {
-        --zen-tidytabs-sort-icon-size: ${iconSize};
-        --zen-tidytabs-sort-icon-opacity: ${iconOpacity};
-        --zen-tidytabs-sort-font-size: ${fontSize};
-      }
-    `;
-    let style = document.getElementById(styleId);
-    if (!style) {
-      style = document.createElement("style");
-      style.id = styleId;
-      document.documentElement.appendChild(style);
-    }
-    style.textContent = css;
-  };
-
   class TidyTabsTreeConnectors {
     constructor() {
       this.SVG_NS = "http://www.w3.org/2000/svg";
@@ -1503,7 +1462,7 @@
   };
 
   // --- Main Sorting Function ---
-  const sortTabsByTopic = async () => {
+  const sortTabsByTopic = async (sortMode = "topic", useFolders = true) => {
     if (isSorting) return;
     isSorting = true;
 
@@ -1564,146 +1523,126 @@
         return;
       }
 
-      // --- AI Grouping ---
-      console.log(
-        "[TabSort] Debug - Starting AI grouping for",
-        initialTabsToSort.length,
-        "tabs"
-      );
-      const aiTabTopics = await askAIForMultipleTopics(initialTabsToSort);
-      console.log(
-        "[TabSort] Debug - AI returned",
-        aiTabTopics.length,
-        "tab-topic pairs"
-      );
-      // --- End AI Grouping ---
+      // --- Build Final Groups ---
+      let finalGroups = {};
+      let aiTabTopics = [];
 
-      // --- Create Final Groups ---
-      const finalGroups = {};
-      aiTabTopics.forEach(({ tab, topic }) => {
-        if (!topic || topic === "Uncategorized" || !tab || !tab.isConnected) {
-          return;
-        }
-        if (!finalGroups[topic]) {
-          finalGroups[topic] = [];
-        }
-        finalGroups[topic].push(tab);
-      });
+      if (sortMode === "topic" || sortMode === "hybrid") {
+        console.log(
+          "[TabSort] Debug - Starting AI grouping for",
+          initialTabsToSort.length,
+          "tabs"
+        );
+        aiTabTopics = await askAIForMultipleTopics(initialTabsToSort);
+        console.log(
+          "[TabSort] Debug - AI returned",
+          aiTabTopics.length,
+          "tab-topic pairs"
+        );
+        aiTabTopics.forEach(({ tab, topic }) => {
+          if (!topic || topic === "Uncategorized" || !tab || !tab.isConnected) return;
+          if (!finalGroups[topic]) finalGroups[topic] = [];
+          finalGroups[topic].push(tab);
+        });
 
-      // Single-tab groups are already filtered out at the clustering level
-      // --- End Create Final Groups ---
-
-      // --- Consolidate Similar Category Names ---
-      const originalKeys = Object.keys(finalGroups);
-      const mergedKeys = new Set();
-      const consolidationMap = {};
-
-      for (let i = 0; i < originalKeys.length; i++) {
-        let keyA = originalKeys[i];
-        if (mergedKeys.has(keyA)) continue;
-        while (consolidationMap[keyA]) {
-          keyA = consolidationMap[keyA];
-        }
-        if (mergedKeys.has(keyA)) continue;
-
-        for (let j = i + 1; j < originalKeys.length; j++) {
-          let keyB = originalKeys[j];
-          if (mergedKeys.has(keyB)) continue;
-          while (consolidationMap[keyB]) {
-            keyB = consolidationMap[keyB];
-          }
-          if (mergedKeys.has(keyB) || keyA === keyB) continue;
-
-          const distance = levenshteinDistance(keyA, keyB);
-          const threshold = CONFIG.CONSOLIDATION_DISTANCE_THRESHOLD;
-
-          if (distance <= threshold && distance > 0) {
-            let canonicalKey = keyA;
-            let mergedKey = keyB;
-            const keyAIsActuallyExisting = allExistingGroupNames.has(keyA);
-            const keyBIsActuallyExisting = allExistingGroupNames.has(keyB);
-
-            if (keyBIsActuallyExisting && !keyAIsActuallyExisting) {
-              [canonicalKey, mergedKey] = [keyB, keyA];
-            } else if (keyAIsActuallyExisting && keyBIsActuallyExisting) {
-              if (keyA.length > keyB.length)
+        // Consolidate similar AI-generated names
+        const originalKeys = Object.keys(finalGroups);
+        const mergedKeys = new Set();
+        const consolidationMap = {};
+        for (let i = 0; i < originalKeys.length; i++) {
+          let keyA = originalKeys[i];
+          if (mergedKeys.has(keyA)) continue;
+          while (consolidationMap[keyA]) keyA = consolidationMap[keyA];
+          if (mergedKeys.has(keyA)) continue;
+          for (let j = i + 1; j < originalKeys.length; j++) {
+            let keyB = originalKeys[j];
+            if (mergedKeys.has(keyB)) continue;
+            while (consolidationMap[keyB]) keyB = consolidationMap[keyB];
+            if (mergedKeys.has(keyB) || keyA === keyB) continue;
+            const distance = levenshteinDistance(keyA, keyB);
+            if (distance <= CONFIG.CONSOLIDATION_DISTANCE_THRESHOLD && distance > 0) {
+              let canonicalKey = keyA;
+              let mergedKey = keyB;
+              const keyAIsActuallyExisting = allExistingGroupNames.has(keyA);
+              const keyBIsActuallyExisting = allExistingGroupNames.has(keyB);
+              if (keyBIsActuallyExisting && !keyAIsActuallyExisting) {
                 [canonicalKey, mergedKey] = [keyB, keyA];
-            } else if (!keyAIsActuallyExisting && !keyBIsActuallyExisting) {
-              if (keyA.length > keyB.length)
-                [canonicalKey, mergedKey] = [keyB, keyA];
-            }
-
-            if (finalGroups[mergedKey]) {
-              if (!finalGroups[canonicalKey]) finalGroups[canonicalKey] = [];
-              const uniqueTabsToAdd = finalGroups[mergedKey].filter(
-                (tab) =>
-                  tab &&
-                  tab.isConnected &&
-                  !finalGroups[canonicalKey].some(
-                    (existingTab) => existingTab === tab
-                  )
-              );
-              finalGroups[canonicalKey].push(...uniqueTabsToAdd);
-            }
-            mergedKeys.add(mergedKey);
-            consolidationMap[mergedKey] = canonicalKey;
-            delete finalGroups[mergedKey];
-            if (mergedKey === keyA) {
-              keyA = canonicalKey;
-              break;
+              } else if (keyAIsActuallyExisting && keyBIsActuallyExisting) {
+                if (keyA.length > keyB.length) [canonicalKey, mergedKey] = [keyB, keyA];
+              } else if (!keyAIsActuallyExisting && !keyBIsActuallyExisting) {
+                if (keyA.length > keyB.length) [canonicalKey, mergedKey] = [keyB, keyA];
+              }
+              if (finalGroups[mergedKey]) {
+                if (!finalGroups[canonicalKey]) finalGroups[canonicalKey] = [];
+                const uniqueTabsToAdd = finalGroups[mergedKey].filter(
+                  (tab) => tab && tab.isConnected && !finalGroups[canonicalKey].some((t) => t === tab)
+                );
+                finalGroups[canonicalKey].push(...uniqueTabsToAdd);
+              }
+              mergedKeys.add(mergedKey);
+              consolidationMap[mergedKey] = canonicalKey;
+              delete finalGroups[mergedKey];
+              if (mergedKey === keyA) { keyA = canonicalKey; break; }
             }
           }
         }
       }
 
-      // --- End Consolidation ---
+      if (sortMode === "url") {
+        initialTabsToSort.forEach((tab) => {
+          try {
+            const url = new URL(tab.linkedBrowser?.currentURI?.spec || tab.getAttribute("image") || "");
+            let host = url.hostname.replace(/^www\./, "");
+            if (!host) host = "Other";
+            const topic = host.charAt(0).toUpperCase() + host.slice(1);
+            if (!finalGroups[topic]) finalGroups[topic] = [];
+            finalGroups[topic].push(tab);
+          } catch {
+            const topic = "Other";
+            if (!finalGroups[topic]) finalGroups[topic] = [];
+            finalGroups[topic].push(tab);
+          }
+        });
+        Object.keys(finalGroups).forEach((key) => {
+          if (finalGroups[key].length < 2) delete finalGroups[key];
+        });
+      }
 
-      // Check if sorting failed (no meaningful grouping occurred)
-      // Success criteria:
-      // 1. Created groups with multiple tabs, OR
-      // 2. Successfully matched tabs to existing groups (even single tabs)
-      const multiTabGroups = Object.values(finalGroups).filter(
-        (tabs) => tabs.length > 1
-      );
-      
-      // Count tabs that were successfully matched to existing groups
-      const tabsMatchedToExistingGroups = aiTabTopics.length;
-      
-      // Sorting is successful if:
-      // - We created new multi-tab groups, OR
-      // - We matched tabs to existing groups, OR  
-      // - We only had 1 tab to sort (no failure for single tabs)
-      const sortingFailed = 
-        multiTabGroups.length === 0 && 
-        tabsMatchedToExistingGroups === 0 && 
-        initialTabsToSort.length > 1;
+      // --- Failure check ---
+      const multiTabGroups = Object.values(finalGroups).filter((tabs) => tabs.length > 1);
+      let sortingFailed = multiTabGroups.length === 0 && aiTabTopics.length === 0 && initialTabsToSort.length > 1;
 
-      console.log(
-        "[TabSort] Debug - Initial tabs to sort:",
-        initialTabsToSort.length
-      );
+      // Hybrid fallback: if AI produced nothing, try URL grouping
+      if (sortMode === "hybrid" && sortingFailed) {
+        console.log("[TabSort] Hybrid fallback to URL grouping");
+        finalGroups = {};
+        initialTabsToSort.forEach((tab) => {
+          try {
+            const url = new URL(tab.linkedBrowser?.currentURI?.spec || tab.getAttribute("image") || "");
+            let host = url.hostname.replace(/^www\./, "");
+            if (!host) host = "Other";
+            const topic = host.charAt(0).toUpperCase() + host.slice(1);
+            if (!finalGroups[topic]) finalGroups[topic] = [];
+            finalGroups[topic].push(tab);
+          } catch {
+            const topic = "Other";
+            if (!finalGroups[topic]) finalGroups[topic] = [];
+            finalGroups[topic].push(tab);
+          }
+        });
+        Object.keys(finalGroups).forEach((key) => {
+          if (finalGroups[key].length < 2) delete finalGroups[key];
+        });
+        sortingFailed = false;
+      }
+
+      console.log("[TabSort] Debug - Initial tabs:", initialTabsToSort.length);
       console.log("[TabSort] Debug - Final groups:", Object.keys(finalGroups));
       console.log("[TabSort] Debug - Multi-tab groups:", multiTabGroups.length);
-      console.log("[TabSort] Debug - Tabs matched to existing groups:", tabsMatchedToExistingGroups);
-      console.log(
-        "[TabSort] Debug - multiTabGroups.length === 0:",
-        multiTabGroups.length === 0
-      );
-      console.log(
-        "[TabSort] Debug - tabsMatchedToExistingGroups === 0:",
-        tabsMatchedToExistingGroups === 0
-      );
-      console.log(
-        "[TabSort] Debug - initialTabsToSort.length > 1:",
-        initialTabsToSort.length > 1
-      );
       console.log("[TabSort] Debug - Sorting failed:", sortingFailed);
 
       if (sortingFailed) {
-        console.log("[TabSort] Triggering failure animation");
-        if (CONFIG.ENABLE_FAILURE_ANIMATION) {
-          startFailureAnimation();
-        }
+        if (CONFIG.ENABLE_FAILURE_ANIMATION) startFailureAnimation();
         return;
       }
 
@@ -1796,7 +1735,7 @@
             try {
               let createdContainer = null;
 
-              if (CONFIG.USE_ZEN_FOLDERS && typeof gZenFolders?.createFolder === "function") {
+              if (useFolders && typeof gZenFolders?.createFolder === "function") {
                 createdContainer = findTopLevelFolderByLabel(
                   topic,
                   currentWorkspaceId
@@ -1931,221 +1870,106 @@
       console.error("Error during overall sorting process:", error);
     } finally {
       // If failure animation is playing, delay the cleanup
-      const sortButton = document.querySelector(
-        "#zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button"
-      );
-
       if (isPlayingFailureAnimation) {
-        // Wait for configured failure animation to complete plus a small buffer
         setTimeout(() => {
           isSorting = false;
           cleanupAnimation();
-
-          // Remove separator pulse indicator
           if (separatorsToSort.length > 0) {
             batchDOMUpdates([
               () =>
                 separatorsToSort.forEach((sep) => {
-                  if (sep?.isConnected) {
-                    sep.classList.remove("separator-is-sorting");
-                  }
+                  if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
                 }),
             ]);
           }
-
-          // Remove tab loading indicators and update button visibility
           setTimeout(() => {
             batchDOMUpdates([
               () => {
                 if (typeof gBrowser !== "undefined" && gBrowser.tabs) {
                   Array.from(gBrowser.tabs).forEach((tab) => {
-                    if (tab?.isConnected) {
-                      tab.classList.remove("tab-is-sorting");
-                    }
+                    if (tab?.isConnected) tab.classList.remove("tab-is-sorting");
                   });
                 }
               },
             ]);
-            updateButtonsVisibilityState();
-            if (sortButton?.isConnected) {
-              sortButton.classList.remove("sorting-active");
-            }
           }, 500);
         }, CONFIG.FAILURE_PULSE_DURATION * CONFIG.FAILURE_PULSE_COUNT + 300);
       } else {
-        // Keep animation running briefly to cover DOM/grouping updates
         setTimeout(() => {
           isSorting = false;
-
-          // Cleanup animation
           cleanupAnimation();
-
-          // Remove separator pulse indicator
           if (separatorsToSort.length > 0) {
             batchDOMUpdates([
               () =>
                 separatorsToSort.forEach((sep) => {
-                  if (sep?.isConnected) {
-                    sep.classList.remove("separator-is-sorting");
-                  }
+                  if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
                 }),
             ]);
           }
-
-          // Remove tab loading indicators and update button visibility
           setTimeout(() => {
             batchDOMUpdates([
               () => {
                 if (typeof gBrowser !== "undefined" && gBrowser.tabs) {
                   Array.from(gBrowser.tabs).forEach((tab) => {
-                    if (tab?.isConnected) {
-                      tab.classList.remove("tab-is-sorting");
-                    }
+                    if (tab?.isConnected) tab.classList.remove("tab-is-sorting");
                   });
                 }
               },
             ]);
-            updateButtonsVisibilityState();
-            if (sortButton?.isConnected) {
-              sortButton.classList.remove("sorting-active");
-            }
           }, 300);
         }, 800);
       }
     }
   };
 
-  // --- Button Initialization & Workspace Handling ---
-  function ensureSortButtonExists(separator) {
-    if (!separator) {
-      return;
-    }
-    try {
-      // --- Create and Insert SVG with SINGLE Path ---
-      if (!separator.querySelector("svg.separator-line-svg")) {
-        const svgNS = "http://www.w3.org/2000/svg";
-        const svg = document.createElementNS(svgNS, "svg");
-        svg.setAttribute("class", "separator-line-svg");
-        svg.setAttribute("viewBox", "0 0 100 2");
-        svg.setAttribute("preserveAspectRatio", "none");
+  // --- Context Menu Items ---
+  function ensureContextMenuItems() {
+    const menu = document.getElementById("tabContextMenu");
+    if (!menu) return;
 
-        // Create ONE path
-        const path = document.createElementNS(svgNS, "path");
-        path.setAttribute("id", `separator-path`); // Single ID
-        path.setAttribute("class", "separator-path-segment"); // Keep common class
-        path.setAttribute("d", "M 0 1 L 100 1"); // Initial straight line
-        path.style.fill = "none";
-        path.style.opacity = "1"; // Ensure it's visible
-        path.setAttribute("stroke-width", "1"); // Added: Set initial stroke width
-        path.setAttribute("stroke-linecap", "round"); // Added: Make path ends round
-        svg.appendChild(path);
+    // Prevent duplicates
+    if (menu.querySelector("#tidy-tabs-separator")) return;
 
-        separator.insertBefore(svg, separator.firstChild);
-      } else {
-      }
-      // --- End SVG ---
+    const sep = document.createXULElement("menuseparator");
+    sep.id = "tidy-tabs-separator";
 
-      // --- Create and Append Sort Button in sidebar foot buttons ---
-      const sidebarFootButtons = document.querySelector("#zen-sidebar-foot-buttons");
-      if (!sidebarFootButtons) {
-        return;
-      }
+    const sortTopicGroups = document.createXULElement("menuitem");
+    sortTopicGroups.id = "tidy-tabs-sort-topic-groups";
+    sortTopicGroups.setAttribute("label", "Sort by Topic into Groups");
+    sortTopicGroups.addEventListener("command", () => sortTabsByTopic("topic", false));
 
-      let tidyButtonAnchor = sidebarFootButtons.querySelector(
-        ".tidy-tabs-button-anchor"
-      );
-      if (!tidyButtonAnchor) {
-        tidyButtonAnchor = document.createXULElement("hbox");
-        tidyButtonAnchor.setAttribute("class", "tidy-tabs-button-anchor");
-        const createNewBtn = sidebarFootButtons.querySelector("#zen-create-new-button");
-        if (createNewBtn) {
-          sidebarFootButtons.insertBefore(tidyButtonAnchor, createNewBtn);
-        } else {
-          sidebarFootButtons.appendChild(tidyButtonAnchor);
-        }
-      } else {
-        const createNewBtn = sidebarFootButtons.querySelector("#zen-create-new-button");
-        if (createNewBtn && tidyButtonAnchor.nextElementSibling !== createNewBtn) {
-          sidebarFootButtons.insertBefore(tidyButtonAnchor, createNewBtn);
-        }
-      }
+    const sortTopicFolders = document.createXULElement("menuitem");
+    sortTopicFolders.id = "tidy-tabs-sort-topic-folders";
+    sortTopicFolders.setAttribute("label", "Sort by Topic into Folders");
+    sortTopicFolders.addEventListener("command", () => sortTabsByTopic("topic", true));
 
-      if (!tidyButtonAnchor.querySelector("#sort-button")) {
-        const buttonFragment = window.MozXULElement.parseXULToFragment(`
-                        <toolbarbutton
-                            id="sort-button"
-                            class="sort-button-with-icon"
-                            command="cmd_zenSortTabs"
-                            tooltiptext="Sort Tabs into Groups by Topic (AI)">
-                            <hbox class="toolbarbutton-box" align="center">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sort-button-icon">
-                                    <path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/>
-                                    <path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/>
-                                    <path d="M3 5a2 2 0 0 0 2 2h3"/>
-                                    <path d="M3 3v13a2 2 0 0 0 2 2h3"/>
-                                </svg>
-                            </hbox>
-                        </toolbarbutton>
-                    `);
-        const buttonNode = buttonFragment.firstChild.cloneNode(true);
+    const sortUrlGroups = document.createXULElement("menuitem");
+    sortUrlGroups.id = "tidy-tabs-sort-url-groups";
+    sortUrlGroups.setAttribute("label", "Sort by URL into Groups");
+    sortUrlGroups.addEventListener("command", () => sortTabsByTopic("url", false));
 
-        tidyButtonAnchor.appendChild(buttonNode);
-      } else {
-      }
-      // --- End Sort Button ---
-    } catch (e) {}
-  }
+    const sortUrlFolders = document.createXULElement("menuitem");
+    sortUrlFolders.id = "tidy-tabs-sort-url-folders";
+    sortUrlFolders.setAttribute("label", "Sort by URL into Folders");
+    sortUrlFolders.addEventListener("command", () => sortTabsByTopic("url", true));
 
-  function addSortButtonToAllSeparators() {
-    const separators = domCache.getSeparators();
-    if (separators.length > 0) {
-      separators.forEach(ensureSortButtonExists);
-      updateButtonsVisibilityState();
-    } else {
-      const periphery = document.querySelector(
-        "#tabbrowser-arrowscrollbox-periphery"
-      );
-      if (periphery && !periphery.querySelector("#sort-button")) {
-        ensureSortButtonExists(periphery);
-      }
-    }
-    updateButtonsVisibilityState();
-  }
+    const sortHybridGroups = document.createXULElement("menuitem");
+    sortHybridGroups.id = "tidy-tabs-sort-hybrid-groups";
+    sortHybridGroups.setAttribute("label", "Sort by Hybrid into Groups");
+    sortHybridGroups.addEventListener("command", () => sortTabsByTopic("hybrid", false));
 
-  function setupSortCommandAndListener() {
-    const zenCommands = domCache.getCommandSet();
-    if (!zenCommands) return;
+    const sortHybridFolders = document.createXULElement("menuitem");
+    sortHybridFolders.id = "tidy-tabs-sort-hybrid-folders";
+    sortHybridFolders.setAttribute("label", "Sort by Hybrid into Folders");
+    sortHybridFolders.addEventListener("command", () => sortTabsByTopic("hybrid", true));
 
-    // Add Sort command
-    if (!zenCommands.querySelector("#cmd_zenSortTabs")) {
-      try {
-        const command = window.MozXULElement.parseXULToFragment(
-          `<command id="cmd_zenSortTabs"/>`
-        ).firstChild;
-        zenCommands.appendChild(command);
-      } catch (e) {}
-    }
-
-    // Add Sort button listener
-    if (!sortButtonListenerAdded) {
-      try {
-        zenCommands.addEventListener("command", (event) => {
-          if (event.target.id === "cmd_zenSortTabs") {
-            const activeWorkspace = gZenWorkspaces?.activeWorkspaceElement;
-
-            // Fade animation class while sorting is active
-            const sortButton = document.querySelector(
-              "#zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button"
-            );
-            if (sortButton) {
-              sortButton.classList.add("sorting-active");
-            }
-            sortTabsByTopic();
-          }
-        });
-        sortButtonListenerAdded = true;
-      } catch (e) {}
-    }
+    menu.appendChild(sep);
+    menu.appendChild(sortTopicGroups);
+    menu.appendChild(sortTopicFolders);
+    menu.appendChild(sortUrlGroups);
+    menu.appendChild(sortUrlFolders);
+    menu.appendChild(sortHybridGroups);
+    menu.appendChild(sortHybridFolders);
   }
 
   // --- gZenWorkspaces Hooks ---
@@ -2170,8 +1994,6 @@
           );
         }
       }
-      addSortButtonToAllSeparators();
-      updateButtonsVisibilityState();
       treeConnectors?.scheduleUpdate?.();
     };
 
@@ -2186,8 +2008,6 @@
           );
         }
       }
-      addSortButtonToAllSeparators();
-      updateButtonsVisibilityState();
       treeConnectors?.scheduleUpdate?.();
     };
   }
@@ -2302,106 +2122,7 @@
     console.log("[TidyTabs] Successfully patched closeAllUnpinnedTabs to preserve tab-groups");
   }
 
-  // --- Optimized Helper: Count Tabs for Button Visibility ---
-  const countTabsForButtonVisibility = () => {
-    const currentWorkspaceId = window.gZenWorkspaces?.activeWorkspace;
-
-    if (
-      !currentWorkspaceId ||
-      typeof gBrowser === "undefined" ||
-      !gBrowser.tabs
-    ) {
-      return {
-        ungroupedTotal: 0,
-        ungroupedNonSelected: 0,
-        hasGroupedTabs: false,
-      };
-    }
-
-    let ungroupedTotal = 0;
-    let ungroupedNonSelected = 0;
-    let hasGroupedTabs = false;
-
-    // Use optimized filtering
-    const allTabs = getFilteredTabs(currentWorkspaceId, {
-      includeGrouped: true,
-      includeSelected: true,
-      includePinned: false,
-      includeEmpty: false,
-      includeGlance: false,
-    });
-
-    for (const tab of allTabs) {
-      const groupParent =
-        tab.group ?? tab.closest(":is(tab-group, zen-folder)");
-      const isInGroup = !!groupParent;
-      const isSelected = tab.selected;
-
-      if (isInGroup) {
-        hasGroupedTabs = true;
-      } else {
-        ungroupedTotal++;
-        if (!isSelected) {
-          ungroupedNonSelected++;
-        }
-      }
-    }
-
-    return {
-      ungroupedTotal,
-      ungroupedNonSelected,
-      hasGroupedTabs,
-    };
-  };
-
-  // --- Updated Helper: Update Button Visibility State ---
-  const updateButtonsVisibilityState = () => {
-    const { ungroupedTotal, ungroupedNonSelected, hasGroupedTabs } =
-      countTabsForButtonVisibility();
-    const separators = domCache.getSeparators();
-
-    batchDOMUpdates([
-      () => {
-        separators.forEach((separator) => {
-          if (!separator?.isConnected) return;
-
-          // Handle Tidy button visibility
-          const tidyButton = document.querySelector(
-            "#zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button"
-          );
-          if (tidyButton) {
-            // Show button if:
-            // 1. We have existing groups and any ungrouped tabs (even just 1)
-            // 2. OR we have enough ungrouped tabs to potentially create new groups
-            const shouldShowTidyButton = hasGroupedTabs
-              ? ungroupedTotal > 0  // Show if any ungrouped tabs exist when groups are present
-              : ungroupedTotal >= CONFIG.MIN_TABS_FOR_SORT; // Original logic for new group creation
-
-            if (shouldShowTidyButton) {
-              tidyButton.classList.remove("hidden-button");
-              // Update tooltip based on context
-              if (hasGroupedTabs && ungroupedTotal > 0) {
-                tidyButton.setAttribute("tooltiptext", 
-                  ungroupedTotal === 1 
-                    ? "Sort Tab into Existing Groups by Topic (AI)"
-                    : "Sort Tabs into Groups by Topic (AI)"
-                );
-              } else {
-                tidyButton.setAttribute("tooltiptext", "Sort Tabs into Groups by Topic (AI)");
-              }
-            } else {
-              tidyButton.classList.add("hidden-button");
-            }
-          }
-
-          // Always keep the separator visible
-          separator.classList.remove("has-no-sortable-tabs");
-        });
-      },
-    ]);
-  };
-
-  // --- Add Tab Event Listeners for Visibility Updates ---
+  // --- Add Tab Event Listeners ---
   function addTabEventListeners() {
     if (
       eventListenersAdded ||
@@ -2410,11 +2131,6 @@
     ) {
       return;
     }
-
-    const updateVisibilityDebounced = debounce(
-      updateButtonsVisibilityState,
-      CONFIG.DEBOUNCE_DELAY
-    );
 
     const events = [
       "TabOpen",
@@ -2430,25 +2146,10 @@
     ];
 
     events.forEach((eventName) => {
-      gBrowser.tabContainer.addEventListener(
-        eventName,
-        updateVisibilityDebounced
-      );
-    });
-
-    events.forEach((eventName) => {
       gBrowser.tabContainer.addEventListener(eventName, () => {
         treeConnectors?.scheduleUpdate?.();
       });
     });
-
-    // Listen to workspace changes
-    if (typeof window.gZenWorkspaces !== "undefined") {
-      window.addEventListener(
-        "zen-workspace-switched",
-        updateVisibilityDebounced
-      );
-    }
 
     eventListenersAdded = true;
   }
@@ -2508,14 +2209,11 @@
           gZenWorkspacesReady;
 
         if (ready) {
-          ensureSortButtonStyles();
-          setupSortCommandAndListener();
-          addSortButtonToAllSeparators();
+          ensureContextMenuItems();
           setupgZenWorkspacesHooks();
           patchClearButtonToPreserveGroups(); // Patch the clear button
           treeConnectors = new TidyTabsTreeConnectors();
           treeConnectors.init();
-          updateButtonsVisibilityState();
           addTabEventListeners();
 
           return true;

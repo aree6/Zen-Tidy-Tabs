@@ -5,9 +5,23 @@ Sort your tabs with Firefox local AI, preserve grouped tabs when clearing, and n
 ## What's integrated
 
 - AI tab sorting into existing groups/folders and new topic groups.
+- URL-based grouping (group by domain).
+- Hybrid mode (AI first, falls back to URL if AI yields no groups).
 - Clear button patch that keeps grouped/folder tabs safe.
 - Integrated Zen Folder Tree Connectors logic (no separate script needed).
-- Runtime config via preferences so users can tune behavior and visuals.
+
+## How to sort
+
+Right-click any tab in the left sidebar to open the context menu. You will see:
+
+- **Sort by Topic into Groups** — AI groups tabs by semantic topic (e.g., "Cars", "Cooking").
+- **Sort by Topic into Folders** — Same as above, but places them into Zen Folders (pinned).
+- **Sort by URL into Groups** — Groups tabs by domain/hostname (e.g., `youtube.com`, `github.com`).
+- **Sort by URL into Folders** — Same as above, but into Zen Folders.
+- **Sort by Hybrid into Groups** — Tries AI topic grouping first; if that fails, falls back to URL grouping.
+- **Sort by Hybrid into Folders** — Same as above, but into Zen Folders.
+
+> **Note:** Zen Folders pin your tabs. Regular groups do not.
 
 ## User config
 
@@ -16,13 +30,9 @@ Only the essentials are exposed in `preferences.json`. Advanced tuning values st
 | Label | Pref | Default |
 |---|---|---|
 | Enable AI | `browser.ml.enabled` | `true` |
-| Grouping: Use Zen Folders | `zen.tidytabs.ui.use-zen-folders` | `true` |
 | Tree Connectors: Enable | `zen.tidytabs.tree.enabled` | `true` |
 | Sort: Enable Failure Animation | `zen.tidytabs.ui.enable-failure-animation` | `true` |
 | Behavior: Preserve Grouped Tabs on Clear | `zen.tidytabs.behavior.patch-clear-button` | `true` |
 | AI: Similarity Threshold | `zen.tidytabs.ai.similarity-threshold` | `0.45` |
-| UI: Icon Size | `zen.tidytabs.ui.sort-button.icon-size` | `1.5rem` |
-| UI: Icon Opacity | `zen.tidytabs.ui.sort-button.icon-opacity` | `0.8` |
-| UI: Font Size | `zen.tidytabs.ui.sort-button.font-size` | `0.625rem` |
 
-> **Tip:** Icon size and font size accept any CSS length (`1.5rem`, `24px`, `2vw`, etc.) so they scale with your screen. Opacity accepts `0`–`1`. Type your value and press Enter to apply.
+> **Tip:** For Similarity Threshold, **lower** values mean stricter matching (fewer, tighter groups) and **higher** values mean looser matching (more, broader groups). Type your value and press Enter to apply.

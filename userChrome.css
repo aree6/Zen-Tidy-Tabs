@@ -38,54 +38,6 @@
     flex-grow: 1;
   }
 
-  & #sort-button {
-    appearance: none !important;
-    opacity: var(--zen-tidytabs-sort-icon-opacity, 0.8);
-    transition: opacity 0.15s;
-    font-size: var(--zen-tidytabs-sort-font-size, 0.625rem) !important;
-    font-weight: 500;
-    gap: 2px;
-    flex-shrink: 0;
-    min-width: 0;
-    overflow: hidden;
-    cursor: pointer !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    white-space: nowrap;
-    -moz-context-properties: fill, fill-opacity !important;
-    fill: currentColor !important;
-
-    & label {
-      display: block;
-      font-weight: 600;
-    }
-
-    & .toolbarbutton-text {
-      display: flex;
-    }
-
-    & .sort-button-icon {
-      width: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
-      height: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
-    }
-
-    &:hover {
-      opacity: 1 !important;
-    }
-
-    :root:not([zen-sidebar-expanded="true"]) & {
-      display: none;
-    }
-
-    &.hidden-button {
-      display: none !important;
-      pointer-events: none !important;
-      opacity: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-  }
-
   &.has-no-sortable-tabs {
     max-height: 0 !important;
     margin: 0 auto !important;
@@ -94,74 +46,11 @@
     overflow: hidden !important;
     gap: 0 !important;
 
-    & svg,
-    & #sort-button {
+    & svg {
       display: none !important;
       width: 0 !important;
       opacity: 0 !important;
     }
-  }
-}
-
-.tidy-tabs-button-anchor {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 !important;
-  min-height: unset;
-  order: 0;
-  flex: 0 0 auto;
-
-  & #sort-button {
-    appearance: none !important;
-    opacity: var(--zen-tidytabs-sort-icon-opacity, 0.8);
-    transition: opacity 0.15s;
-    font-size: var(--zen-tidytabs-sort-font-size, 0.625rem) !important;
-    font-weight: 500;
-    gap: 2px;
-    flex-shrink: 0;
-    min-width: 0;
-    overflow: hidden;
-    cursor: pointer !important;
-    margin: 0 !important;
-    padding: 4px !important;
-    white-space: nowrap;
-    -moz-context-properties: fill, fill-opacity !important;
-    fill: currentColor !important;
-
-    & .sort-button-icon {
-      width: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
-      height: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
-    }
-
-    &.sorting-active {
-      animation: tidy-fade-pulse 0.9s ease-in-out infinite;
-    }
-
-    &:hover {
-      opacity: 1 !important;
-    }
-
-    :root:not([zen-sidebar-expanded="true"]) & {
-      display: none;
-    }
-
-    &.hidden-button {
-      display: none !important;
-      pointer-events: none !important;
-      opacity: 0 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-  }
-}
-
-#zen-sidebar-foot-buttons .tidy-tabs-button-anchor #sort-button {
-  opacity: var(--zen-tidytabs-sort-icon-opacity, 0.8);
-
-  & .sort-button-icon {
-    width: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
-    height: var(--zen-tidytabs-sort-icon-size, 1.5rem) !important;
   }
 }
 
@@ -191,14 +80,6 @@
 }
 
 [lwt-toolbar="light"] {
-  & #sort-button {
-    color: rgba(0, 0, 0, 0.6);
-
-    &:hover {
-      color: black;
-    }
-  }
-
   & .separator-path-segment {
     /* Match native toolbarseparator color for light theme */
     stroke: rgba(0, 0, 0, 0.2) !important;
