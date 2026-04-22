@@ -41,5 +41,6 @@ Both entries use the same engine under the hood:
 | Grouping Strength | `zen.tidytabs.grouping-strength` | `0.5` |
 | Menu: Show 'Tidy Tabs into Groups' | `zen.tidytabs.menu.sort-groups` | `true` |
 | Menu: Show 'Tidy Tabs into Folders' | `zen.tidytabs.menu.sort-folders` | `true` |
+| Group leftovers as 'Miscellaneous' | `zen.tidytabs.group-leftovers-as-misc` | `true` |
 
 > **Tip:** **Grouping Strength** (0–1) is a single knob that drives both AI and fuzzy modes. **0 = conservative** (only near-identical tabs group); **1 = aggressive** (loosely-related tabs still group). Default `0.5` is balanced. Disable either menu entry if you only use one container style.

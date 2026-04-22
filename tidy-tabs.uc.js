@@ -44,6 +44,10 @@
     // use one container style.
     MENU_SORT_GROUPS: true,
     MENU_SORT_FOLDERS: true,
+    // After AI/fuzzy, any tabs that didn't land in a group are bucketed
+    // into a single "Miscellaneous" group so nothing is left stranded.
+    // Turn off if you prefer leftovers to stay loose in the sidebar.
+    GROUP_LEFTOVERS_AS_MISC: true,
   };
 
   const PREF_BRANCH = "zen.tidytabs.";
@@ -54,6 +58,7 @@
     TREE_CONNECTORS_ENABLED: ["bool", "tree.enabled"],
     MENU_SORT_GROUPS: ["bool", "menu.sort-groups"],
     MENU_SORT_FOLDERS: ["bool", "menu.sort-folders"],
+    GROUP_LEFTOVERS_AS_MISC: ["bool", "group-leftovers-as-misc"],
   };
 
   const services =
@@ -1853,6 +1858,56 @@
     return consolidateSimilarGroupNames(finalGroups, existingNames);
   };
 
+  // Rescue pass for tabs the primary grouper (AI or fuzzy) left loose.
+  //   1. Collect tabs from `allTabs` that aren't a member of any group.
+  //   2. Bucket them by hostname; any host with ≥2 tabs becomes its own
+  //      group (or merges into an existing group with the same pretty
+  //      label). This is the big win for AI mode, where 3 youtube.com
+  //      tabs with semantically-different titles would otherwise stay
+  //      ungrouped.
+  //   3. If `useMisc` is on, remaining loose tabs (singletons / no-host)
+  //      are combined into a single "Miscellaneous" group so nothing is
+  //      left stranded in the sidebar.
+  const applyPostGroupingRescue = (allTabs, groups, useMisc) => {
+    const groupedSet = new Set();
+    Object.values(groups).forEach((tabs) =>
+      tabs.forEach((t) => groupedSet.add(t))
+    );
+
+    const ungrouped = allTabs.filter(
+      (t) => t?.isConnected && !groupedSet.has(t)
+    );
+    if (!ungrouped.length) return groups;
+
+    const byHost = new Map();
+    const noHost = [];
+    ungrouped.forEach((t) => {
+      const host = getTabHost(t);
+      if (!host) { noHost.push(t); return; }
+      if (!byHost.has(host)) byHost.set(host, []);
+      byHost.get(host).push(t);
+    });
+
+    const result = { ...groups };
+    const stillLoose = [];
+    for (const [host, tabs] of byHost) {
+      if (tabs.length >= 2) {
+        const label = prettifyLabel(host.split(".")[0]);
+        result[label] = (result[label] || []).concat(tabs);
+      } else {
+        stillLoose.push(...tabs);
+      }
+    }
+    stillLoose.push(...noHost);
+
+    if (useMisc && stillLoose.length >= 2) {
+      const miscLabel = "Miscellaneous";
+      result[miscLabel] = (result[miscLabel] || []).concat(stillLoose);
+    }
+
+    return result;
+  };
+
   // Marker class on <html> while a sort is in-flight. Styled in
   // userChrome.css with a subtle opacity pulse on all tabs so the user
   // gets passive feedback without a modal/toast.
@@ -1905,10 +1960,14 @@
       });
 
       // --- Filter initial tabs using optimized function ---
+      // When sorting INTO FOLDERS, include pinned tabs: Zen folders only
+      // hold pinned tabs, so excluding them would leave the user's
+      // pinned content (often the tabs they most want organized) stranded
+      // outside any folder.
       const initialTabsToSort = getFilteredTabs(currentWorkspaceId, {
         includeGrouped: false,
         includeSelected: true,
-        includePinned: false,
+        includePinned: useFolders,
         includeEmpty: false,
         includeGlance: false,
       }).filter((tab) => {
@@ -1961,6 +2020,21 @@
         );
         finalGroups = fuzzyGroupByTokens(initialTabsToSort, allExistingGroupNames);
       }
+
+      // --- Rescue ungrouped tabs ---
+      // The AI path in particular loves to leave same-site tabs ungrouped
+      // whenever their titles don't share semantics (e.g. a news video +
+      // a channel page + a subscriptions feed all on youtube.com). A
+      // hostname fallback is a cheap, strong prior that fixes this.
+      //
+      // After hostname rescue, anything still loose optionally goes into
+      // a single "Miscellaneous" bucket so the user's sidebar ends up
+      // fully tidied rather than partially.
+      finalGroups = applyPostGroupingRescue(
+        initialTabsToSort,
+        finalGroups,
+        CONFIG.GROUP_LEFTOVERS_AS_MISC
+      );
 
       // --- Failure check ---
       const multiTabGroups = Object.values(finalGroups).filter((tabs) => tabs.length > 1);
@@ -2287,21 +2361,22 @@
   };
 
   // Pick a stroke color that reads well on the current menu background.
-  // We try to pull an actual theme variable first; fall back to a reasoned
-  // OS-prefers-color-scheme check; and finally to a neutral middle gray.
+  //
+  // In chrome windows, `document.documentElement.color` is the effective UI
+  // text color — dark on light themes and light on dark themes — which is
+  // exactly the contrast we want for menu icons. That's far more reliable
+  // than poking at individual CSS custom properties (which Zen overrides
+  // in non-obvious ways).
   const getMenuIconStroke = () => {
     try {
-      const style = window.getComputedStyle(document.documentElement);
-      const raw =
-        style.getPropertyValue("--arrowpanel-color") ||
-        style.getPropertyValue("--toolbar-color") ||
-        style.getPropertyValue("--menu-color");
-      const trimmed = raw?.trim();
-      if (trimmed) return trimmed;
+      const color = window.getComputedStyle(document.documentElement).color;
+      // rgba(0,0,0,0) means "no color set" — skip it so we don't render
+      // a transparent icon.
+      if (color && color !== "rgba(0, 0, 0, 0)") return color;
     } catch {}
     try {
       const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      return isDark ? "#d6d6d6" : "#4a4a4a";
+      return isDark ? "#e0e0e0" : "#3a3a3a";
     } catch {}
     return "#888";
   };

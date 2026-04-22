@@ -42,5 +42,11 @@
     "label": "Menu: Show 'Tidy Tabs into Folders' (pinned)",
     "property": "zen.tidytabs.menu.sort-folders",
     "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Group leftover tabs under 'Miscellaneous' — when off, ungrouped tabs stay loose in the sidebar",
+    "property": "zen.tidytabs.group-leftovers-as-misc",
+    "defaultValue": true
   }
 ]
