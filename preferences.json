@@ -26,10 +26,10 @@
   },
   {
     "type": "string",
-    "label": "AI: Similarity Threshold — lower = stricter / fewer groups, higher = looser / more groups (0-1)",
-    "property": "zen.tidytabs.ai.similarity-threshold",
-    "defaultValue": "0.45",
-    "placeholder": "0.45"
+    "label": "Grouping Strength — 0 = conservative (only near-identical tabs group), 1 = aggressive (loosely related tabs group). Applies to both AI and fuzzy modes.",
+    "property": "zen.tidytabs.grouping-strength",
+    "defaultValue": "0.5",
+    "placeholder": "0.5"
   },
   {
     "type": "checkbox",

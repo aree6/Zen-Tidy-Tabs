@@ -38,8 +38,8 @@ Both entries use the same engine under the hood:
 | Tree Connectors: Enable | `zen.tidytabs.tree.enabled` | `true` |
 | Sort: Enable Failure Animation | `zen.tidytabs.ui.enable-failure-animation` | `true` |
 | Behavior: Preserve Grouped Tabs on Clear | `zen.tidytabs.behavior.patch-clear-button` | `true` |
-| AI: Similarity Threshold | `zen.tidytabs.ai.similarity-threshold` | `0.45` |
+| Grouping Strength | `zen.tidytabs.grouping-strength` | `0.5` |
 | Menu: Show 'Tidy Tabs into Groups' | `zen.tidytabs.menu.sort-groups` | `true` |
 | Menu: Show 'Tidy Tabs into Folders' | `zen.tidytabs.menu.sort-folders` | `true` |
 
-> **Tip:** For the AI similarity threshold, **lower** = stricter / fewer groups, **higher** = looser / more groups. Disable either menu entry if you only use one container style.
+> **Tip:** **Grouping Strength** (0–1) is a single knob that drives both AI and fuzzy modes. **0 = conservative** (only near-identical tabs group); **1 = aggressive** (loosely-related tabs still group). Default `0.5` is balanced. Disable either menu entry if you only use one container style.

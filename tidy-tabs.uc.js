@@ -6,8 +6,16 @@
 
 (() => {
   const DEFAULT_CONFIG = {
-    SIMILARITY_THRESHOLD: 0.45,
-    GROUP_SIMILARITY_THRESHOLD: 0.65, // Lowered from 0.75 to be more inclusive for existing groups
+    // Single user-facing knob. 0 = conservative (tabs only group when
+    // very similar); 1 = aggressive (loosely-related tabs still group).
+    // All internal thresholds below are derived from this value — see
+    // `deriveGroupingThresholds` after CONFIG load.
+    GROUPING_STRENGTH: 0.5,
+    // Derived thresholds (overwritten post-load). Kept in CONFIG so the
+    // rest of the file can reference them without a separate object.
+    SIMILARITY_THRESHOLD: 0.475,
+    GROUP_SIMILARITY_THRESHOLD: 0.475,
+    FUZZY_CLUSTER_THRESHOLD: 0.265,
     MAX_INIT_CHECKS: 50,
     INIT_CHECK_INTERVAL: 100,
     CONSOLIDATION_DISTANCE_THRESHOLD: 2,
@@ -40,7 +48,7 @@
 
   const PREF_BRANCH = "zen.tidytabs.";
   const PREFS = {
-    SIMILARITY_THRESHOLD: ["double", "ai.similarity-threshold"],
+    GROUPING_STRENGTH: ["double", "grouping-strength"],
     ENABLE_FAILURE_ANIMATION: ["bool", "ui.enable-failure-animation"],
     ENABLE_CLEAR_BUTTON_PATCH: ["bool", "behavior.patch-clear-button"],
     TREE_CONNECTORS_ENABLED: ["bool", "tree.enabled"],
@@ -128,7 +136,28 @@
     return mergedConfig;
   };
 
+  // Map the user-facing 0..1 strength onto the internal metric thresholds
+  // that actually drive clustering. Each metric has its own sensible
+  // range (cosine similarity clusters at ~0.2..0.75; weighted-Jaccard at
+  // ~0.08..0.45), so we linearly interpolate the FROM/TO for each.
+  //
+  // strength = 0 → very strict (only near-duplicate tabs cluster)
+  // strength = 1 → very loose (loosely-related tabs still cluster)
+  //
+  // This inverts the intuition of raw cosine-threshold because users kept
+  // expecting "bigger number → more grouping", which is the opposite of
+  // what a raw similarity threshold does.
+  const deriveGroupingThresholds = (config) => {
+    const raw = Number(config.GROUPING_STRENGTH);
+    const s = Math.max(0, Math.min(1, Number.isFinite(raw) ? raw : 0.5));
+    config.GROUPING_STRENGTH = s;
+    config.SIMILARITY_THRESHOLD = 0.75 - s * 0.55;       // 0.75 → 0.20
+    config.GROUP_SIMILARITY_THRESHOLD = 0.70 - s * 0.45; // 0.70 → 0.25
+    config.FUZZY_CLUSTER_THRESHOLD = 0.45 - s * 0.37;    // 0.45 → 0.08
+  };
+
   const CONFIG = loadRuntimeConfig();
+  deriveGroupingThresholds(CONFIG);
 
   // --- Globals & State ---
   let isSorting = false;
@@ -576,7 +605,7 @@
 
       const children =
         isExpanded && isVisible
-          ? this.getVisibleChildren(container, isCollapsed)
+          ? this.getVisibleChildren(group, isCollapsed)
           : [];
 
       let connector = container.querySelector(":scope > .tree-connector");
@@ -677,9 +706,25 @@
       return rootFolder;
     }
 
-    getVisibleChildren(container, isParentCollapsed = false) {
-      const folder = container.closest("zen-folder, tab-group");
-      const items = folder?.allItems || [];
+    // `host` is a zen-folder OR a regular tab-group. We deliberately accept
+    // the element directly (rather than deriving via container.closest)
+    // because closest() was picking up the wrong ancestor in some nested
+    // shapes (e.g. a folder containing a group), which silently broke the
+    // folder connector.
+    getVisibleChildren(host, isParentCollapsed = false) {
+      if (!host) return [];
+
+      // zen-folder exposes an `.allItems` live list including nested
+      // folders; vanilla tab-group doesn't, so fall back to the
+      // container's direct children.
+      let items = null;
+      if (Array.isArray(host.allItems) || host.allItems?.length >= 0) {
+        items = host.allItems;
+      }
+      if (!items || !items.length) {
+        const container = host.querySelector(":scope > .tab-group-container");
+        items = container ? Array.from(container.children) : [];
+      }
       if (!items.length) return [];
 
       const result = [];
@@ -695,13 +740,14 @@
           if (item.isZenFolder) {
             const rootMost = item.rootMostCollapsedFolder;
             if (isParentCollapsed || (rootMost && rootMost !== item)) {
-              const subContainer = item.querySelector(":scope > .tab-group-container");
-              if (subContainer) {
-                result.push(...this.getVisibleChildren(subContainer, true));
-              }
+              result.push(...this.getVisibleChildren(item, true));
             } else {
               result.push(item);
             }
+          } else {
+            // Regular nested tab-group inside a folder: treat it as a leaf
+            // point in the parent's tree so the connector reaches it.
+            result.push(item);
           }
         } else if (
           window.gBrowser.isTab(item) &&
@@ -751,7 +797,7 @@
 
       const children =
         isExpanded && isVisible
-          ? this.getVisibleChildren(container, isCollapsed)
+          ? this.getVisibleChildren(folder, isCollapsed)
           : [];
 
       let connector = container.querySelector(":scope > .tree-connector");
@@ -1567,7 +1613,8 @@
     "help","faq","terms","privacy","policy","contact","more","less","menu"
   ]);
 
-  const FUZZY_CLUSTER_THRESHOLD = 0.22; // weighted-Jaccard overlap to merge clusters
+  // Weighted-Jaccard overlap required to merge two clusters. Derived from
+  // the user-facing GROUPING_STRENGTH so the knob actually does something.
   const FUZZY_MIN_TOKEN_LEN = 3;
   // Bigrams capture multi-word concepts ("tab groups", "credit card") that
   // get broken up by unigram tokenization. We only bother with title bigrams
@@ -1743,18 +1790,25 @@
     validTabs.forEach((tab) => tabWeights.set(tab, tabTokenWeights(meta.get(tab), idf)));
 
     // 1. Seed clusters by hostname — tabs on the same host are almost
-    //    always related, so this is a strong prior.
+    //    always related, so this is a strong prior. Tabs WITHOUT a host
+    //    (about:blank, Settings pages, etc.) seed their own singleton
+    //    clusters so unrelated blank-ish pages don't get falsely lumped
+    //    into a single "Other" group.
     const clusters = new Map();
-    const noHost = [];
+    const clusterList = [];
     validTabs.forEach((tab) => {
       const host = meta.get(tab).host;
-      if (!host) { noHost.push(tab); return; }
-      if (!clusters.has(host)) clusters.set(host, []);
+      if (!host) {
+        clusterList.push([tab]);
+        return;
+      }
+      if (!clusters.has(host)) {
+        const bucket = [];
+        clusters.set(host, bucket);
+        clusterList.push(bucket);
+      }
       clusters.get(host).push(tab);
     });
-
-    const clusterList = [...clusters.values()];
-    if (noHost.length) clusterList.push(noHost);
 
     // Aggregate token-weight maps per cluster by summing each member's map.
     const buildClusterWeights = (tabs) => {
@@ -1776,7 +1830,7 @@
       for (let j = i + 1; j < clusterList.length; j++) {
         if (mergedInto[j] !== -1) continue;
         const sim = weightedJaccard(clusterWeights[i], clusterWeights[j]);
-        if (sim >= FUZZY_CLUSTER_THRESHOLD) {
+        if (sim >= CONFIG.FUZZY_CLUSTER_THRESHOLD) {
           clusterList[i].push(...clusterList[j]);
           clusterWeights[j].forEach((v, k) =>
             clusterWeights[i].set(k, (clusterWeights[i].get(k) || 0) + v)
@@ -2219,17 +2273,37 @@
 
   const TIDY_TABS_MENU_ITEM_CLASS = "tidy-tabs-menuitem";
 
-  // Lucide icons. `stroke="context-stroke"` lets the CSS
-  // `-moz-context-properties: stroke` declaration in userChrome.css drive
-  // the color (currently `light-dark(#555, #d0d0d0)`), so the icon reads
-  // naturally on both light and dark menus.
+  // Lucide icons with a `{{STROKE}}` placeholder. Data-URI SVGs rendered
+  // through XUL `image` attrs DO NOT inherit currentColor or honor
+  // -moz-context-properties, so we have to bake the stroke color into
+  // the SVG source at inject time.
   const TIDY_TABS_ICON_SVGS = {
     // layers
     groups:
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`,
     // folder-tree
     folders:
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>`,
+  };
+
+  // Pick a stroke color that reads well on the current menu background.
+  // We try to pull an actual theme variable first; fall back to a reasoned
+  // OS-prefers-color-scheme check; and finally to a neutral middle gray.
+  const getMenuIconStroke = () => {
+    try {
+      const style = window.getComputedStyle(document.documentElement);
+      const raw =
+        style.getPropertyValue("--arrowpanel-color") ||
+        style.getPropertyValue("--toolbar-color") ||
+        style.getPropertyValue("--menu-color");
+      const trimmed = raw?.trim();
+      if (trimmed) return trimmed;
+    } catch {}
+    try {
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      return isDark ? "#d6d6d6" : "#4a4a4a";
+    } catch {}
+    return "#888";
   };
 
   const svgToDataURI = (svg) => {
@@ -2241,13 +2315,19 @@
     }
   };
 
+  const buildIconDataURI = (iconKey) => {
+    const template = TIDY_TABS_ICON_SVGS[iconKey];
+    if (!template) return "";
+    return svgToDataURI(template.replace(/\{\{STROKE\}\}/g, getMenuIconStroke()));
+  };
+
   function createTidyTabsMenuItem(item) {
     const mi = document.createXULElement("menuitem");
     mi.id = item.id;
     mi.className = `menuitem-iconic ${TIDY_TABS_MENU_ITEM_CLASS}`;
     mi.setAttribute("label", item.label);
-    const svg = TIDY_TABS_ICON_SVGS[item.iconKey];
-    if (svg) mi.setAttribute("image", svgToDataURI(svg));
+    const uri = buildIconDataURI(item.iconKey);
+    if (uri) mi.setAttribute("image", uri);
     mi.addEventListener("command", () => sortTabsByTopic(item.useFolders));
     return mi;
   }

@@ -170,7 +170,7 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
    small (1 → 0.62) and the cycle long (1.4s). */
 @keyframes tidy-tabs-sort-pulse {
   0%   { opacity: 1;    }
-  50%  { opacity: 0.62; }
+  50%  { opacity: 0.5; }
   100% { opacity: 1;    }
 }
 
@@ -192,13 +192,7 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   }
 }
 
-/* --- Menu icon tinting (theme-aware) ---------------------------------- */
-/* Our Lucide SVGs embed a fixed stroke color for reliability, but we can
-   still tint them in CSS via -moz-context-properties + stroke so that
-   light-mode users don't see a white icon on a white menu and vice versa.
-   The JS SVG uses `stroke="currentColor"` when built with this enabled. */
-menuitem.tidy-tabs-menuitem {
-  -moz-context-properties: stroke, fill, fill-opacity, stroke-opacity;
-  fill: transparent;
-  stroke: light-dark(#555, #d0d0d0);
-}
+/* Menu icons: stroke color is baked into the SVG source by JS because
+   data: URI SVGs rendered through XUL `image` attrs do NOT inherit
+   currentColor or honor -moz-context-properties. See `getMenuIconStroke`
+   in tidy-tabs.uc.js. */
