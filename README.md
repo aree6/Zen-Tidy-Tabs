@@ -4,25 +4,31 @@ Sort your tabs with Firefox local AI, preserve grouped tabs when clearing, and n
 
 ## What's integrated
 
-- AI tab sorting into existing groups/folders and new topic groups.
-- URL-based grouping (group by domain).
-- Hybrid mode (AI fed with both the tab title **and** the URL hostname for richer signals).
-- Minimal, flat tab-group styling (folders keep their native look).
-- Clear button patch that keeps grouped/folder tabs safe.
-- Integrated Zen Folder Tree Connectors logic (no separate script needed).
+- Topic-based tab grouping with two engines:
+  - **AI** (Firefox's local ML embeddings) when `browser.ml.enabled` is on.
+  - **Fuzzy** (deterministic token + hostname clustering) when AI is off. No model required.
+- Drops tabs into existing groups/folders when they match; creates new ones otherwise.
+- Refined, minimal tab-group label styling (no colored accent line). Folders keep their native look.
+- Clear-button patch that preserves grouped/folder tabs.
+- Integrated Zen Folder Tree Connectors logic.
 
 ## How to sort
 
-Right-click any **empty area of the sidebar** (between tabs, near the bottom, on the separator) to open the Tidy Tabs context menu. Each entry has a Lucide icon and can be toggled on/off in preferences.
+Right-click the **sidebar background** (the empty space in your tab area) to open Zen's workspace menu. Tidy Tabs appends two entries at the bottom with Lucide icons:
 
-- **Sort by Topic into Groups** — AI groups tabs by semantic topic using the tab title (e.g., "Cars", "Cooking").
-- **Sort by Topic into Folders** — Same as above, but places tabs into Zen Folders (pinned).
-- **Sort by URL into Groups** — Groups tabs by domain/hostname (e.g., `youtube.com`, `github.com`).
-- **Sort by URL into Folders** — Same as above, but into Zen Folders.
-- **Sort by Hybrid into Groups** — AI grouping where the input combines **tab title + hostname**, so the model gets both semantic and domain signals.
-- **Sort by Hybrid into Folders** — Same as above, but into Zen Folders.
+- **Tidy Tabs into Groups** — creates regular tab groups.
+- **Tidy Tabs into Folders** — creates Zen Folders (which pin your tabs).
 
-> **Note:** Zen Folders auto-pin your tabs. Regular groups do not. Right-clicking directly on a tab still shows Zen's native tab menu untouched.
+Both entries use the same engine under the hood:
+
+- If **AI is enabled** (`browser.ml.enabled = true`), Firefox's local embedding model groups tabs by semantic topic derived from their titles (e.g., "Cars", "Cooking").
+- If **AI is disabled**, a deterministic fuzzy pipeline kicks in:
+  1. Tokenize each tab's title + hostname (stopwords removed).
+  2. Seed clusters by hostname.
+  3. Merge clusters whose token sets overlap above a Jaccard threshold.
+  4. Name each cluster by its most frequent descriptive token, falling back to a prettified hostname.
+
+> **Note:** Right-clicking directly on a tab still shows Zen's native tab menu untouched. Right-clicking a group label still shows the group's menu.
 
 ## User config
 
@@ -33,11 +39,7 @@ Right-click any **empty area of the sidebar** (between tabs, near the bottom, on
 | Sort: Enable Failure Animation | `zen.tidytabs.ui.enable-failure-animation` | `true` |
 | Behavior: Preserve Grouped Tabs on Clear | `zen.tidytabs.behavior.patch-clear-button` | `true` |
 | AI: Similarity Threshold | `zen.tidytabs.ai.similarity-threshold` | `0.45` |
-| Menu: Show 'Sort by Topic into Groups' | `zen.tidytabs.menu.topic-groups` | `true` |
-| Menu: Show 'Sort by Topic into Folders' | `zen.tidytabs.menu.topic-folders` | `true` |
-| Menu: Show 'Sort by URL into Groups' | `zen.tidytabs.menu.url-groups` | `true` |
-| Menu: Show 'Sort by URL into Folders' | `zen.tidytabs.menu.url-folders` | `true` |
-| Menu: Show 'Sort by Hybrid into Groups' | `zen.tidytabs.menu.hybrid-groups` | `true` |
-| Menu: Show 'Sort by Hybrid into Folders' | `zen.tidytabs.menu.hybrid-folders` | `true` |
+| Menu: Show 'Tidy Tabs into Groups' | `zen.tidytabs.menu.sort-groups` | `true` |
+| Menu: Show 'Tidy Tabs into Folders' | `zen.tidytabs.menu.sort-folders` | `true` |
 
-> **Tip:** For Similarity Threshold, **lower** values mean stricter matching (fewer, tighter groups) and **higher** values mean looser matching (more, broader groups). Disable any menu entries you don't use to keep the right-click menu clean.
+> **Tip:** For the AI similarity threshold, **lower** = stricter / fewer groups, **higher** = looser / more groups. Disable either menu entry if you only use one container style.

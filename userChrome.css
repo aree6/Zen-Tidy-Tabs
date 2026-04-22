@@ -93,58 +93,88 @@
 }
 
 /* --- Sidebar context-menu (Tidy Tabs) ---------------------------------- */
-/* Lucide icons are inlined as data: URIs using stroke="context-fill" so
-   -moz-context-properties lets the icon adopt the current menu text color. */
-#tidy-tabs-sidebar-menu menuitem.tidy-tabs-menuitem {
-  -moz-context-properties: fill, stroke, fill-opacity;
-  fill: currentColor;
+/* Menu items are appended to Zen's native workspace menu (or our fallback
+   popup). We enable -moz-context-properties so Lucide stroke-only icons
+   pick up the current menu foreground color. */
+menuitem.tidy-tabs-menuitem {
+  -moz-context-properties: fill, stroke, fill-opacity, stroke-opacity;
+  fill: transparent;
   stroke: currentColor;
 }
 
-#tidy-tabs-sidebar-menu menuitem.tidy-tabs-menuitem > .menu-iconic-left > .menu-iconic-icon,
-#tidy-tabs-sidebar-menu menuitem.tidy-tabs-menuitem .menu-iconic-icon {
+menuitem.tidy-tabs-menuitem > .menu-iconic-left > .menu-iconic-icon,
+menuitem.tidy-tabs-menuitem .menu-iconic-icon {
   width: 16px !important;
   height: 16px !important;
+  margin-inline-end: 6px;
   opacity: 0.85;
 }
 
-/* --- Minimal tab-group styling ----------------------------------------- */
-/* Folders (zen-folder) keep their native look. Only flatten regular
-   tab-group: drop the colored accent line and chip background, render the
-   label as a subtle, muted caption like the target screenshot. */
+/* Lucide "layers" — sort into groups */
+menuitem.tidy-tabs-icon-groups {
+  list-style-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>');
+}
+
+/* Lucide "folder-tree" — sort into folders */
+menuitem.tidy-tabs-icon-folders {
+  list-style-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>');
+}
+
+/* --- Minimal (but refined) tab-group styling --------------------------- */
+/* Folders (zen-folder) keep their native look. Regular tab-group is
+   flattened: label becomes a quiet section header with a subtle divider,
+   no colored accent bar, no chip background. */
 tab-group:not(zen-folder) {
   --tab-group-color: transparent !important;
   --tab-group-color-invert: transparent !important;
   --tab-group-color-pale: transparent !important;
+}
 
-  & > .tab-group-label-container {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 6px 10px 2px !important;
-    margin: 2px 0 0 !important;
-  }
+tab-group:not(zen-folder) > .tab-group-label-container {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 10px 12px 4px !important;
+  margin: 4px 0 0 !important;
+  position: relative;
+}
 
-  & > .tab-group-label-container::before,
-  & > .tab-group-label-container::after {
-    display: none !important;
-  }
+/* Subtle 1px divider above the label acts as a quiet section break. */
+tab-group:not(zen-folder) > .tab-group-label-container::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 0;
+  height: 1px;
+  background: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.06));
+  pointer-events: none;
+}
 
-  & .tab-group-label {
-    color: var(--sidebar-text-color, var(--toolbar-color)) !important;
-    opacity: 0.55 !important;
-    font-weight: 500 !important;
-    font-size: 0.78em !important;
-    letter-spacing: 0.02em;
-    text-transform: none;
-  }
+/* No stray right-side decorations. */
+tab-group:not(zen-folder) > .tab-group-label-container::after {
+  display: none !important;
+}
 
-  /* Kill the vertical colored bar that normally marks group children. */
-  & > .tabbrowser-tab::before,
-  & > .tab-group-container::before,
-  & .tabbrowser-tab[group]::before {
-    display: none !important;
-    background: transparent !important;
-    border: none !important;
-  }
+tab-group:not(zen-folder) .tab-group-label {
+  color: var(--sidebar-text-color, var(--toolbar-color)) !important;
+  opacity: 0.65 !important;
+  font-weight: 600 !important;
+  font-size: 0.72em !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+tab-group:not(zen-folder) .tab-group-label-container:hover .tab-group-label {
+  opacity: 0.9 !important;
+}
+
+/* Kill the vertical colored bar that normally marks group children. */
+tab-group:not(zen-folder) > .tabbrowser-tab::before,
+tab-group:not(zen-folder) > .tab-group-container::before,
+tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
+  display: none !important;
+  background: transparent !important;
+  border: none !important;
 }

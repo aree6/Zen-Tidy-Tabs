@@ -35,14 +35,10 @@
     TREE_FOLDER_INDENT_PX: 12,
     TREE_RELATED_CHILD_INDENT_PX: 20,
     TREE_CONNECTOR_OFFSET_PX: -15,
-    // Per-menu-item visibility. Each toggle controls whether the sidebar
-    // context-menu entry appears. Users can trim to only the modes they use.
-    MENU_TOPIC_GROUPS: true,
-    MENU_TOPIC_FOLDERS: true,
-    MENU_URL_GROUPS: true,
-    MENU_URL_FOLDERS: true,
-    MENU_HYBRID_GROUPS: true,
-    MENU_HYBRID_FOLDERS: true,
+    // Per-menu-item visibility. Users can hide either entry if they only
+    // use one container style.
+    MENU_SORT_GROUPS: true,
+    MENU_SORT_FOLDERS: true,
   };
 
   const PREF_BRANCH = "zen.tidytabs.";
@@ -51,12 +47,8 @@
     ENABLE_FAILURE_ANIMATION: ["bool", "ui.enable-failure-animation"],
     ENABLE_CLEAR_BUTTON_PATCH: ["bool", "behavior.patch-clear-button"],
     TREE_CONNECTORS_ENABLED: ["bool", "tree.enabled"],
-    MENU_TOPIC_GROUPS: ["bool", "menu.topic-groups"],
-    MENU_TOPIC_FOLDERS: ["bool", "menu.topic-folders"],
-    MENU_URL_GROUPS: ["bool", "menu.url-groups"],
-    MENU_URL_FOLDERS: ["bool", "menu.url-folders"],
-    MENU_HYBRID_GROUPS: ["bool", "menu.hybrid-groups"],
-    MENU_HYBRID_FOLDERS: ["bool", "menu.hybrid-folders"],
+    MENU_SORT_GROUPS: ["bool", "menu.sort-groups"],
+    MENU_SORT_FOLDERS: ["bool", "menu.sort-folders"],
   };
 
   const services =
@@ -993,32 +985,10 @@
     }
   };
 
-  // Build the text fed to the AI embedding model.
-  // In hybrid mode we append the tab's hostname so the AI gets both
-  // the human-facing title and the domain signal.
-  const getTabEmbeddingText = (tab, includeUrl = false) => {
-    const title = getTabTitle(tab);
-    if (!includeUrl) return title;
-    try {
-      const browser =
-        tab?.linkedBrowser ||
-        tab?._linkedBrowser ||
-        gBrowser?.getBrowserForTab?.(tab);
-      const spec = browser?.currentURI?.spec;
-      if (!spec || spec.startsWith("about:")) return title;
-      const host = new URL(spec).hostname.replace(/^www\./, "");
-      if (!host || title.toLowerCase().includes(host.toLowerCase())) return title;
-      return `${title} — ${host}`;
-    } catch {
-      return title;
-    }
-  };
-
   // Process embeddings in batches for better performance
   const processTabsInBatches = async (
     tabs,
-    batchSize = CONFIG.EMBEDDING_BATCH_SIZE,
-    includeUrl = false
+    batchSize = CONFIG.EMBEDDING_BATCH_SIZE
   ) => {
     if (!Array.isArray(tabs) || tabs.length === 0) return [];
 
@@ -1026,7 +996,7 @@
     for (let i = 0; i < tabs.length; i += batchSize) {
       const batch = tabs.slice(i, i + batchSize);
       const batchResults = await Promise.all(
-        batch.map((tab) => generateEmbedding(getTabEmbeddingText(tab, includeUrl)))
+        batch.map((tab) => generateEmbedding(getTabTitle(tab)))
       );
       results.push(...batchResults);
     }
@@ -1077,7 +1047,7 @@
     }
   };
 
-  const askAIForMultipleTopics = async (tabs, includeUrl = false) => {
+  const askAIForMultipleTopics = async (tabs) => {
     if (!Array.isArray(tabs) || tabs.length === 0) return [];
 
     const validTabs = tabs.filter((tab) => tab?.isConnected);
@@ -1110,24 +1080,14 @@
     }
 
     // Process tabs in batches for better performance.
-    // Keep title-only strings for Levenshtein matching below; the
-    // includeUrl flag only affects the embedding text.
     const tabTitles = validTabs.map((tab) => getTabTitle(tab));
-    const embeddings = await processTabsInBatches(
-      validTabs,
-      CONFIG.EMBEDDING_BATCH_SIZE,
-      includeUrl
-    );
+    const embeddings = await processTabsInBatches(validTabs);
 
     // Calculate embeddings for existing workspace groups
     const existingGroupEmbeddings = new Map();
     for (const [groupName, groupInfo] of existingWorkspaceGroups) {
       try {
-        const groupTabEmbeddings = await processTabsInBatches(
-          groupInfo.tabs,
-          CONFIG.EMBEDDING_BATCH_SIZE,
-          includeUrl
-        );
+        const groupTabEmbeddings = await processTabsInBatches(groupInfo.tabs);
         const validGroupEmbeddings = groupTabEmbeddings.filter(emb => 
           Array.isArray(emb) && emb.length > 0
         );
@@ -1213,11 +1173,7 @@
 
     // Second pass: cluster remaining ungrouped tabs (only if we have enough)
     if (ungroupedTabs.length > 1) {
-      const ungroupedEmbeddings = await processTabsInBatches(
-        ungroupedTabs,
-        CONFIG.EMBEDDING_BATCH_SIZE,
-        includeUrl
-      );
+      const ungroupedEmbeddings = await processTabsInBatches(ungroupedTabs);
 
       // Filter out empty embeddings
       const validEmbeddings = ungroupedEmbeddings.filter(
@@ -1511,8 +1467,226 @@
     }
   };
 
+  // --- Mode Detection -----------------------------------------------------
+  // Firefox exposes `browser.ml.enabled`; if it is off (or the pref is
+  // missing) we must fall back to deterministic fuzzy grouping.
+  const isAIEnabled = () => {
+    try {
+      return services?.prefs?.getBoolPref?.("browser.ml.enabled", false) ?? false;
+    } catch {
+      return false;
+    }
+  };
+
+  // --- Name Consolidation ------------------------------------------------
+  // Collapse groups whose labels differ by <= N edits (e.g. "Shopping" vs
+  // "Shoping") into a single canonical label, preferring pre-existing
+  // workspace group names so we don't create near-duplicates.
+  const consolidateSimilarGroupNames = (groups, existingNames) => {
+    const keys = Object.keys(groups);
+    const merged = new Set();
+    const rename = {};
+
+    for (let i = 0; i < keys.length; i++) {
+      let keyA = keys[i];
+      if (merged.has(keyA)) continue;
+      while (rename[keyA]) keyA = rename[keyA];
+
+      for (let j = i + 1; j < keys.length; j++) {
+        let keyB = keys[j];
+        if (merged.has(keyB)) continue;
+        while (rename[keyB]) keyB = rename[keyB];
+        if (keyA === keyB) continue;
+
+        const dist = levenshteinDistance(keyA, keyB);
+        if (dist <= 0 || dist > CONFIG.CONSOLIDATION_DISTANCE_THRESHOLD) continue;
+
+        // Pick the canonical name: prefer existing, then shorter
+        let canonical = keyA;
+        let dropped = keyB;
+        const aExisting = existingNames.has(keyA);
+        const bExisting = existingNames.has(keyB);
+        if (bExisting && !aExisting) [canonical, dropped] = [keyB, keyA];
+        else if (aExisting === bExisting && keyA.length > keyB.length)
+          [canonical, dropped] = [keyB, keyA];
+
+        if (groups[dropped]) {
+          groups[canonical] ||= [];
+          groups[dropped].forEach((t) => {
+            if (t?.isConnected && !groups[canonical].includes(t)) {
+              groups[canonical].push(t);
+            }
+          });
+          delete groups[dropped];
+        }
+        merged.add(dropped);
+        rename[dropped] = canonical;
+        if (dropped === keyA) { keyA = canonical; break; }
+      }
+    }
+    return groups;
+  };
+
+  // --- Fuzzy Grouping (AI-off fallback) ----------------------------------
+  // Approach:
+  //   1. Tokenize each tab's (title + hostname) into meaningful lowercase
+  //      tokens, dropping stopwords & short noise.
+  //   2. Seed clusters with tabs sharing the same hostname (high-signal).
+  //   3. Merge clusters whose Jaccard token overlap exceeds a threshold.
+  //   4. Pick accurate cluster names: most frequent descriptive token,
+  //      falling back to a prettified hostname.
+  //
+  // Deterministic, offline, no model required.
+  const FUZZY_STOPWORDS = new Set([
+    "the","a","an","and","or","but","of","for","to","in","on","at","by",
+    "with","from","is","are","was","were","be","been","being","it","its",
+    "this","that","these","those","as","if","then","than","so","not","no",
+    "yes","you","your","we","our","us","they","them","their","he","she",
+    "his","her","i","me","my","mine","do","does","did","have","has","had",
+    "will","would","can","could","should","may","might","must","shall",
+    "new","tab","page","home","welcome","untitled","loading","about",
+    "blank","localhost","google","search","www","com","net","org","io",
+    "co","app","dev","docs","doc","login","signin","sign","in","up","out",
+    "help","faq","terms","privacy","policy","contact","more","less","menu"
+  ]);
+
+  const FUZZY_CLUSTER_THRESHOLD = 0.25; // Jaccard overlap to merge clusters
+  const FUZZY_MIN_TOKEN_LEN = 3;
+
+  const getTabHost = (tab) => {
+    try {
+      const spec = tab?.linkedBrowser?.currentURI?.spec;
+      if (!spec || spec.startsWith("about:")) return "";
+      return new URL(spec).hostname.replace(/^www\./, "").toLowerCase();
+    } catch {
+      return "";
+    }
+  };
+
+  const tokenizeTab = (tab) => {
+    const title = getTabTitle(tab) || "";
+    const host = getTabHost(tab);
+    // Pull identifier-ish tokens from the hostname (github, youtube, …)
+    // but skip generic tokens that occur in every URL.
+    const hostTokens = host
+      .split(/[.\-]/)
+      .filter((t) => t && t.length >= FUZZY_MIN_TOKEN_LEN)
+      .filter((t) => !FUZZY_STOPWORDS.has(t));
+
+    const titleTokens = title
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t && t.length >= FUZZY_MIN_TOKEN_LEN)
+      .filter((t) => !FUZZY_STOPWORDS.has(t));
+
+    return { host, hostTokens, titleTokens, allTokens: new Set([...hostTokens, ...titleTokens]) };
+  };
+
+  const jaccard = (a, b) => {
+    if (!a.size || !b.size) return 0;
+    let intersect = 0;
+    for (const x of a) if (b.has(x)) intersect++;
+    return intersect / (a.size + b.size - intersect);
+  };
+
+  const prettifyLabel = (raw) => {
+    if (!raw) return "Other";
+    return raw
+      .split(/[\s\-_]+/)
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  };
+
+  const nameFuzzyCluster = (clusterTabs, meta) => {
+    // Tally tokens across the cluster, weighting title tokens higher than
+    // hostname tokens (titles are more descriptive of topic).
+    const freq = new Map();
+    const bump = (tok, weight) => freq.set(tok, (freq.get(tok) || 0) + weight);
+    for (const tab of clusterTabs) {
+      const m = meta.get(tab);
+      if (!m) continue;
+      m.titleTokens.forEach((t) => bump(t, 2));
+      m.hostTokens.forEach((t) => bump(t, 1));
+    }
+
+    const ranked = [...freq.entries()]
+      .filter(([, c]) => c >= Math.max(2, Math.floor(clusterTabs.length * 0.4)))
+      .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length);
+
+    if (ranked.length) return prettifyLabel(ranked[0][0]);
+
+    // Fallback: most common hostname in cluster.
+    const hostCount = new Map();
+    clusterTabs.forEach((tab) => {
+      const h = meta.get(tab)?.host;
+      if (h) hostCount.set(h, (hostCount.get(h) || 0) + 1);
+    });
+    const topHost = [...hostCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    return prettifyLabel(topHost?.split(".")[0] || "Other");
+  };
+
+  const fuzzyGroupByTokens = (tabs, existingNames) => {
+    const validTabs = tabs.filter((t) => t?.isConnected);
+    if (validTabs.length === 0) return {};
+
+    const meta = new Map();
+    validTabs.forEach((tab) => meta.set(tab, tokenizeTab(tab)));
+
+    // 1. Seed by hostname.
+    const clusters = new Map(); // hostKey -> [tabs]
+    const noHost = [];
+    validTabs.forEach((tab) => {
+      const host = meta.get(tab).host;
+      if (!host) { noHost.push(tab); return; }
+      if (!clusters.has(host)) clusters.set(host, []);
+      clusters.get(host).push(tab);
+    });
+
+    // 2. Merge clusters by Jaccard token similarity.
+    const clusterList = [...clusters.values()];
+    if (noHost.length) clusterList.push(noHost);
+
+    const clusterTokens = clusterList.map((tabs) => {
+      const s = new Set();
+      tabs.forEach((tab) => meta.get(tab).allTokens.forEach((t) => s.add(t)));
+      return s;
+    });
+
+    const mergedInto = new Array(clusterList.length).fill(-1);
+    for (let i = 0; i < clusterList.length; i++) {
+      if (mergedInto[i] !== -1) continue;
+      for (let j = i + 1; j < clusterList.length; j++) {
+        if (mergedInto[j] !== -1) continue;
+        if (jaccard(clusterTokens[i], clusterTokens[j]) >= FUZZY_CLUSTER_THRESHOLD) {
+          clusterList[i].push(...clusterList[j]);
+          clusterTokens[j].forEach((t) => clusterTokens[i].add(t));
+          mergedInto[j] = i;
+        }
+      }
+    }
+
+    // 3. Emit named groups, dropping singletons.
+    const finalGroups = {};
+    clusterList.forEach((tabs, idx) => {
+      if (mergedInto[idx] !== -1) return;
+      if (tabs.length < 2) return;
+      let label = nameFuzzyCluster(tabs, meta);
+      // Avoid label collisions with existing groups that contain different tabs
+      while (finalGroups[label]) label = `${label} 2`;
+      finalGroups[label] = tabs;
+    });
+
+    return consolidateSimilarGroupNames(finalGroups, existingNames);
+  };
+
   // --- Main Sorting Function ---
-  const sortTabsByTopic = async (sortMode = "topic", useFolders = true) => {
+  // Single entry point. Topic-based grouping only:
+  //   - AI (Firefox local ML) when `browser.ml.enabled` is on
+  //   - Fuzzy token similarity (title + hostname) otherwise
+  // `useFolders`: true  -> create Zen Folders (pinned)
+  //               false -> create regular tab groups
+  const sortTabsByTopic = async (useFolders = false) => {
     if (isSorting) return;
     isSorting = true;
 
@@ -1576,21 +1750,17 @@
       // --- Build Final Groups ---
       let finalGroups = {};
       let aiTabTopics = [];
+      const aiEnabled = isAIEnabled();
 
-      if (sortMode === "topic" || sortMode === "hybrid") {
-        const includeUrlInAIText = sortMode === "hybrid";
+      if (aiEnabled) {
         console.log(
-          `[TabSort] Debug - Starting AI grouping (${sortMode}) for`,
+          "[TabSort] Using AI grouping for",
           initialTabsToSort.length,
-          "tabs",
-          includeUrlInAIText ? "[title+url]" : "[title]"
+          "tabs"
         );
-        aiTabTopics = await askAIForMultipleTopics(
-          initialTabsToSort,
-          includeUrlInAIText
-        );
+        aiTabTopics = await askAIForMultipleTopics(initialTabsToSort);
         console.log(
-          "[TabSort] Debug - AI returned",
+          "[TabSort] AI returned",
           aiTabTopics.length,
           "tab-topic pairs"
         );
@@ -1600,96 +1770,22 @@
           finalGroups[topic].push(tab);
         });
 
-        // Consolidate similar AI-generated names
-        const originalKeys = Object.keys(finalGroups);
-        const mergedKeys = new Set();
-        const consolidationMap = {};
-        for (let i = 0; i < originalKeys.length; i++) {
-          let keyA = originalKeys[i];
-          if (mergedKeys.has(keyA)) continue;
-          while (consolidationMap[keyA]) keyA = consolidationMap[keyA];
-          if (mergedKeys.has(keyA)) continue;
-          for (let j = i + 1; j < originalKeys.length; j++) {
-            let keyB = originalKeys[j];
-            if (mergedKeys.has(keyB)) continue;
-            while (consolidationMap[keyB]) keyB = consolidationMap[keyB];
-            if (mergedKeys.has(keyB) || keyA === keyB) continue;
-            const distance = levenshteinDistance(keyA, keyB);
-            if (distance <= CONFIG.CONSOLIDATION_DISTANCE_THRESHOLD && distance > 0) {
-              let canonicalKey = keyA;
-              let mergedKey = keyB;
-              const keyAIsActuallyExisting = allExistingGroupNames.has(keyA);
-              const keyBIsActuallyExisting = allExistingGroupNames.has(keyB);
-              if (keyBIsActuallyExisting && !keyAIsActuallyExisting) {
-                [canonicalKey, mergedKey] = [keyB, keyA];
-              } else if (keyAIsActuallyExisting && keyBIsActuallyExisting) {
-                if (keyA.length > keyB.length) [canonicalKey, mergedKey] = [keyB, keyA];
-              } else if (!keyAIsActuallyExisting && !keyBIsActuallyExisting) {
-                if (keyA.length > keyB.length) [canonicalKey, mergedKey] = [keyB, keyA];
-              }
-              if (finalGroups[mergedKey]) {
-                if (!finalGroups[canonicalKey]) finalGroups[canonicalKey] = [];
-                const uniqueTabsToAdd = finalGroups[mergedKey].filter(
-                  (tab) => tab && tab.isConnected && !finalGroups[canonicalKey].some((t) => t === tab)
-                );
-                finalGroups[canonicalKey].push(...uniqueTabsToAdd);
-              }
-              mergedKeys.add(mergedKey);
-              consolidationMap[mergedKey] = canonicalKey;
-              delete finalGroups[mergedKey];
-              if (mergedKey === keyA) { keyA = canonicalKey; break; }
-            }
-          }
-        }
-      }
-
-      if (sortMode === "url") {
-        initialTabsToSort.forEach((tab) => {
-          try {
-            const url = new URL(tab.linkedBrowser?.currentURI?.spec || tab.getAttribute("image") || "");
-            let host = url.hostname.replace(/^www\./, "");
-            if (!host) host = "Other";
-            const topic = host.charAt(0).toUpperCase() + host.slice(1);
-            if (!finalGroups[topic]) finalGroups[topic] = [];
-            finalGroups[topic].push(tab);
-          } catch {
-            const topic = "Other";
-            if (!finalGroups[topic]) finalGroups[topic] = [];
-            finalGroups[topic].push(tab);
-          }
-        });
-        Object.keys(finalGroups).forEach((key) => {
-          if (finalGroups[key].length < 2) delete finalGroups[key];
-        });
+        finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
+      } else {
+        console.log(
+          "[TabSort] AI disabled — using fuzzy grouping for",
+          initialTabsToSort.length,
+          "tabs"
+        );
+        finalGroups = fuzzyGroupByTokens(initialTabsToSort, allExistingGroupNames);
       }
 
       // --- Failure check ---
       const multiTabGroups = Object.values(finalGroups).filter((tabs) => tabs.length > 1);
-      let sortingFailed = multiTabGroups.length === 0 && aiTabTopics.length === 0 && initialTabsToSort.length > 1;
-
-      // Hybrid fallback: if AI produced nothing, try URL grouping
-      if (sortMode === "hybrid" && sortingFailed) {
-        console.log("[TabSort] Hybrid fallback to URL grouping");
-        finalGroups = {};
-        initialTabsToSort.forEach((tab) => {
-          try {
-            const url = new URL(tab.linkedBrowser?.currentURI?.spec || tab.getAttribute("image") || "");
-            let host = url.hostname.replace(/^www\./, "");
-            if (!host) host = "Other";
-            const topic = host.charAt(0).toUpperCase() + host.slice(1);
-            if (!finalGroups[topic]) finalGroups[topic] = [];
-            finalGroups[topic].push(tab);
-          } catch {
-            const topic = "Other";
-            if (!finalGroups[topic]) finalGroups[topic] = [];
-            finalGroups[topic].push(tab);
-          }
-        });
-        Object.keys(finalGroups).forEach((key) => {
-          if (finalGroups[key].length < 2) delete finalGroups[key];
-        });
-        sortingFailed = false;
-      }
+      const sortingFailed =
+        multiTabGroups.length === 0 &&
+        (aiEnabled ? aiTabTopics.length === 0 : true) &&
+        initialTabsToSort.length > 1;
 
       console.log("[TabSort] Debug - Initial tabs:", initialTabsToSort.length);
       console.log("[TabSort] Debug - Final groups:", Object.keys(finalGroups));
@@ -1977,120 +2073,151 @@
     }
   };
 
-  // --- Sidebar Context Menu ---
-  // Lucide icons (https://lucide.dev) inlined as data URIs. Using currentColor
-  // lets the theme recolor them via -moz-context-properties on menuitem-iconic.
-  const LUCIDE_ICONS = {
-    // layers — topic/groups
-    topicGroups:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`
-      ),
-    // folder-tree — topic/folders
-    topicFolders:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>`
-      ),
-    // globe — url/groups
-    urlGroups:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`
-      ),
-    // folder-open — url/folders
-    urlFolders:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>`
-      ),
-    // sparkles — hybrid/groups
-    hybridGroups:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>`
-      ),
-    // wand-sparkles — hybrid/folders
-    hybridFolders:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.64 3.64a1.35 1.35 0 0 0-1.91 0L14 9.37l.63.63 5.73-5.73a1.35 1.35 0 0 0 0-1.91z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/><path d="m9.5 14.5-1 1"/><path d="m16 16-3-3"/><path d="M13.29 13.29 3.15 23.43"/></svg>`
-      ),
-  };
+  // --- Sidebar Context Menu ------------------------------------------------
+  // Menu items are injected into Zen's existing sidebar menu
+  // (`zenWorkspaceMoreActions`) so the user still sees every native option
+  // (Delete/Rename workspace, etc.) plus our sort actions beneath a
+  // menuseparator. If the native menu isn't present yet we poll for it, and
+  // if it never arrives we fall back to a private popup bound to right-click
+  // on the sidebar background — that way the feature still works on older
+  // Zen versions where the menu ID changed.
+  //
+  // Icon strategy: menuitems get a stable class name; the actual SVG is
+  // drawn by userChrome.css via list-style-image on
+  // `.menu-iconic-icon`. Using CSS sidesteps the inline-data-URI quirks
+  // that plagued the previous implementation (icons not rendering).
 
-  // Ordered definition drives menu rendering + per-item preference gating.
   const SIDEBAR_MENU_ITEMS = [
-    { id: "tidy-tabs-sort-topic-groups",   label: "Sort by Topic into Groups",   mode: "topic",  folders: false, prefKey: "MENU_TOPIC_GROUPS",   iconKey: "topicGroups"   },
-    { id: "tidy-tabs-sort-topic-folders",  label: "Sort by Topic into Folders",  mode: "topic",  folders: true,  prefKey: "MENU_TOPIC_FOLDERS",  iconKey: "topicFolders"  },
-    { id: "tidy-tabs-sort-url-groups",     label: "Sort by URL into Groups",     mode: "url",    folders: false, prefKey: "MENU_URL_GROUPS",     iconKey: "urlGroups"     },
-    { id: "tidy-tabs-sort-url-folders",    label: "Sort by URL into Folders",    mode: "url",    folders: true,  prefKey: "MENU_URL_FOLDERS",    iconKey: "urlFolders"    },
-    { id: "tidy-tabs-sort-hybrid-groups",  label: "Sort by Hybrid into Groups",  mode: "hybrid", folders: false, prefKey: "MENU_HYBRID_GROUPS",  iconKey: "hybridGroups"  },
-    { id: "tidy-tabs-sort-hybrid-folders", label: "Sort by Hybrid into Folders", mode: "hybrid", folders: true,  prefKey: "MENU_HYBRID_FOLDERS", iconKey: "hybridFolders" },
+    {
+      id: "tidy-tabs-sort-groups",
+      label: "Tidy Tabs into Groups",
+      iconClass: "tidy-tabs-icon-groups",
+      prefKey: "MENU_SORT_GROUPS",
+      useFolders: false,
+    },
+    {
+      id: "tidy-tabs-sort-folders",
+      label: "Tidy Tabs into Folders",
+      iconClass: "tidy-tabs-icon-folders",
+      prefKey: "MENU_SORT_FOLDERS",
+      useFolders: true,
+    },
   ];
 
-  // Which containers count as the "sidebar empty area" trigger region.
-  // Right-clicks on actual tabs/groups are deferred to the native menu.
-  const SIDEBAR_TRIGGER_SELECTORS = [
-    "#tabbrowser-arrowscrollbox",
-    "#vertical-pinned-tabs-container",
-    ".zen-workspace-tabs-section",
-    "#zen-sidebar-foot-buttons",
-    ".pinned-tabs-container-separator",
-  ];
-  const SIDEBAR_IGNORE_SELECTOR =
-    "tab, tab-group, zen-folder, .tab-group-label-container, toolbarbutton, menuitem, .tab-close-button";
+  const NATIVE_SIDEBAR_MENU_ID = "zenWorkspaceMoreActions";
+  const TIDY_TABS_MENU_ITEM_CLASS = "tidy-tabs-menuitem";
 
-  function buildSidebarContextMenu() {
+  function createTidyTabsMenuItem(item) {
+    const mi = document.createXULElement("menuitem");
+    mi.id = item.id;
+    mi.className = `menuitem-iconic ${TIDY_TABS_MENU_ITEM_CLASS} ${item.iconClass}`;
+    mi.setAttribute("label", item.label);
+    mi.addEventListener("command", () => sortTabsByTopic(item.useFolders));
+    return mi;
+  }
+
+  function getEnabledMenuItems() {
+    return SIDEBAR_MENU_ITEMS.filter((item) => CONFIG[item.prefKey]);
+  }
+
+  // Inject our items + leading separator into the given menupopup, only
+  // once. Safe to call repeatedly — no duplicates.
+  function injectItemsInto(popup) {
+    if (!popup || popup.querySelector(`.${TIDY_TABS_MENU_ITEM_CLASS}`)) return;
+    const items = getEnabledMenuItems();
+    if (!items.length) return;
+
+    const sep = document.createXULElement("menuseparator");
+    sep.className = `${TIDY_TABS_MENU_ITEM_CLASS} tidy-tabs-menu-separator`;
+    popup.appendChild(sep);
+    items.forEach((item) => popup.appendChild(createTidyTabsMenuItem(item)));
+  }
+
+  // Try to attach to the native Zen sidebar menu. Returns true on success.
+  function tryAttachToNativeMenu() {
+    const native = document.getElementById(NATIVE_SIDEBAR_MENU_ID);
+    if (!native) return false;
+    injectItemsInto(native);
+    return true;
+  }
+
+  // Fallback popup in case the native menu isn't available (future-proofing
+  // against ID renames). Bound only if native-menu attach failed.
+  function buildFallbackPopup() {
     const existing = document.getElementById("tidy-tabs-sidebar-menu");
     if (existing) existing.remove();
 
+    const items = getEnabledMenuItems();
+    if (!items.length) return null;
+
     const popup = document.createXULElement("menupopup");
     popup.id = "tidy-tabs-sidebar-menu";
+    items.forEach((item) => popup.appendChild(createTidyTabsMenuItem(item)));
 
-    let visibleCount = 0;
-    SIDEBAR_MENU_ITEMS.forEach((item) => {
-      if (!CONFIG[item.prefKey]) return;
-      const mi = document.createXULElement("menuitem");
-      mi.id = item.id;
-      mi.className = "menuitem-iconic tidy-tabs-menuitem";
-      mi.setAttribute("label", item.label);
-      mi.setAttribute("image", LUCIDE_ICONS[item.iconKey]);
-      mi.addEventListener("command", () =>
-        sortTabsByTopic(item.mode, item.folders)
-      );
-      popup.appendChild(mi);
-      visibleCount++;
-    });
-
-    if (!visibleCount) return null;
-
-    const host =
-      document.getElementById("mainPopupSet") || document.documentElement;
-    host.appendChild(popup);
+    (document.getElementById("mainPopupSet") || document.documentElement).appendChild(popup);
     return popup;
   }
 
-  function ensureSidebarContextMenu() {
-    const popup = buildSidebarContextMenu();
+  function bindFallbackContextMenu() {
+    const popup = buildFallbackPopup();
     if (!popup) return;
 
-    const onContextMenu = (event) => {
-      // Ignore if user right-clicked an actual tab / group / control —
-      // those have their own native menus and shouldn't be hijacked.
-      const target = event.target;
-      if (target?.closest?.(SIDEBAR_IGNORE_SELECTOR)) return;
-      if (!target?.closest?.(SIDEBAR_TRIGGER_SELECTORS.join(","))) return;
+    const TRIGGERS = [
+      "#tabbrowser-arrowscrollbox",
+      ".zen-workspace-tabs-section",
+      ".zen-workspace-empty-space",
+    ];
+    const IGNORE =
+      "tab, tab-group, zen-folder, .tab-group-label-container, toolbarbutton, .tab-close-button";
 
-      event.preventDefault();
-      event.stopPropagation();
-      popup.openPopupAtScreen(event.screenX, event.screenY, true);
+    document
+      .getElementById("navigator-toolbox")
+      ?.addEventListener(
+        "contextmenu",
+        (event) => {
+          const t = event.target;
+          if (!t?.closest?.(TRIGGERS.join(","))) return;
+          if (t.closest?.(IGNORE)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          popup.openPopupAtScreen(event.screenX, event.screenY, true);
+        },
+        true
+      );
+  }
+
+  function ensureSidebarContextMenu() {
+    if (tryAttachToNativeMenu()) return;
+
+    // Native menu may be constructed lazily (first right-click). Watch the
+    // DOM briefly; if it never appears, fall back.
+    let tries = 0;
+    const tick = () => {
+      if (tryAttachToNativeMenu()) return;
+      if (++tries >= CONFIG.MAX_INIT_CHECKS) {
+        console.warn(
+          `[TidyTabs] native sidebar menu #${NATIVE_SIDEBAR_MENU_ID} not found, using fallback popup`
+        );
+        bindFallbackContextMenu();
+        return;
+      }
+      setTimeout(tick, CONFIG.INIT_CHECK_INTERVAL);
     };
+    tick();
 
-    // Bind at sidebar root so we catch all empty-region right-clicks.
-    const sidebar =
-      document.getElementById("navigator-toolbox") || document.documentElement;
-    sidebar.addEventListener("contextmenu", onContextMenu, true);
+    // Also listen for popupshowing on any descendant menupopup — Zen may
+    // construct the native menu on first open, so we catch it there too
+    // and inject before the user sees it.
+    document.addEventListener(
+      "popupshowing",
+      (event) => {
+        const popup = event.target;
+        if (popup?.id === NATIVE_SIDEBAR_MENU_ID) {
+          injectItemsInto(popup);
+        }
+      },
+      true
+    );
   }
 
   // --- gZenWorkspaces Hooks ---
