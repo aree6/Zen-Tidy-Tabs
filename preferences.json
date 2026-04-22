@@ -30,5 +30,41 @@
     "property": "zen.tidytabs.ai.similarity-threshold",
     "defaultValue": "0.45",
     "placeholder": "0.45"
+  },
+  {
+    "type": "checkbox",
+    "label": "Menu: Show 'Sort by Topic into Groups' (AI on tab titles)",
+    "property": "zen.tidytabs.menu.topic-groups",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Menu: Show 'Sort by Topic into Folders' (AI on tab titles, pinned)",
+    "property": "zen.tidytabs.menu.topic-folders",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Menu: Show 'Sort by URL into Groups' (by hostname)",
+    "property": "zen.tidytabs.menu.url-groups",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Menu: Show 'Sort by URL into Folders' (by hostname, pinned)",
+    "property": "zen.tidytabs.menu.url-folders",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Menu: Show 'Sort by Hybrid into Groups' (AI on title + URL)",
+    "property": "zen.tidytabs.menu.hybrid-groups",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "label": "Menu: Show 'Sort by Hybrid into Folders' (AI on title + URL, pinned)",
+    "property": "zen.tidytabs.menu.hybrid-folders",
+    "defaultValue": true
   }
 ]

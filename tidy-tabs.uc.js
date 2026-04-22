@@ -35,6 +35,14 @@
     TREE_FOLDER_INDENT_PX: 12,
     TREE_RELATED_CHILD_INDENT_PX: 20,
     TREE_CONNECTOR_OFFSET_PX: -15,
+    // Per-menu-item visibility. Each toggle controls whether the sidebar
+    // context-menu entry appears. Users can trim to only the modes they use.
+    MENU_TOPIC_GROUPS: true,
+    MENU_TOPIC_FOLDERS: true,
+    MENU_URL_GROUPS: true,
+    MENU_URL_FOLDERS: true,
+    MENU_HYBRID_GROUPS: true,
+    MENU_HYBRID_FOLDERS: true,
   };
 
   const PREF_BRANCH = "zen.tidytabs.";
@@ -43,6 +51,12 @@
     ENABLE_FAILURE_ANIMATION: ["bool", "ui.enable-failure-animation"],
     ENABLE_CLEAR_BUTTON_PATCH: ["bool", "behavior.patch-clear-button"],
     TREE_CONNECTORS_ENABLED: ["bool", "tree.enabled"],
+    MENU_TOPIC_GROUPS: ["bool", "menu.topic-groups"],
+    MENU_TOPIC_FOLDERS: ["bool", "menu.topic-folders"],
+    MENU_URL_GROUPS: ["bool", "menu.url-groups"],
+    MENU_URL_FOLDERS: ["bool", "menu.url-folders"],
+    MENU_HYBRID_GROUPS: ["bool", "menu.hybrid-groups"],
+    MENU_HYBRID_FOLDERS: ["bool", "menu.hybrid-folders"],
   };
 
   const services =
@@ -979,10 +993,32 @@
     }
   };
 
+  // Build the text fed to the AI embedding model.
+  // In hybrid mode we append the tab's hostname so the AI gets both
+  // the human-facing title and the domain signal.
+  const getTabEmbeddingText = (tab, includeUrl = false) => {
+    const title = getTabTitle(tab);
+    if (!includeUrl) return title;
+    try {
+      const browser =
+        tab?.linkedBrowser ||
+        tab?._linkedBrowser ||
+        gBrowser?.getBrowserForTab?.(tab);
+      const spec = browser?.currentURI?.spec;
+      if (!spec || spec.startsWith("about:")) return title;
+      const host = new URL(spec).hostname.replace(/^www\./, "");
+      if (!host || title.toLowerCase().includes(host.toLowerCase())) return title;
+      return `${title} — ${host}`;
+    } catch {
+      return title;
+    }
+  };
+
   // Process embeddings in batches for better performance
   const processTabsInBatches = async (
     tabs,
-    batchSize = CONFIG.EMBEDDING_BATCH_SIZE
+    batchSize = CONFIG.EMBEDDING_BATCH_SIZE,
+    includeUrl = false
   ) => {
     if (!Array.isArray(tabs) || tabs.length === 0) return [];
 
@@ -990,7 +1026,7 @@
     for (let i = 0; i < tabs.length; i += batchSize) {
       const batch = tabs.slice(i, i + batchSize);
       const batchResults = await Promise.all(
-        batch.map((tab) => generateEmbedding(getTabTitle(tab)))
+        batch.map((tab) => generateEmbedding(getTabEmbeddingText(tab, includeUrl)))
       );
       results.push(...batchResults);
     }
@@ -1041,7 +1077,7 @@
     }
   };
 
-  const askAIForMultipleTopics = async (tabs) => {
+  const askAIForMultipleTopics = async (tabs, includeUrl = false) => {
     if (!Array.isArray(tabs) || tabs.length === 0) return [];
 
     const validTabs = tabs.filter((tab) => tab?.isConnected);
@@ -1073,15 +1109,25 @@
       });
     }
 
-    // Process tabs in batches for better performance
+    // Process tabs in batches for better performance.
+    // Keep title-only strings for Levenshtein matching below; the
+    // includeUrl flag only affects the embedding text.
     const tabTitles = validTabs.map((tab) => getTabTitle(tab));
-    const embeddings = await processTabsInBatches(validTabs);
+    const embeddings = await processTabsInBatches(
+      validTabs,
+      CONFIG.EMBEDDING_BATCH_SIZE,
+      includeUrl
+    );
 
     // Calculate embeddings for existing workspace groups
     const existingGroupEmbeddings = new Map();
     for (const [groupName, groupInfo] of existingWorkspaceGroups) {
       try {
-        const groupTabEmbeddings = await processTabsInBatches(groupInfo.tabs);
+        const groupTabEmbeddings = await processTabsInBatches(
+          groupInfo.tabs,
+          CONFIG.EMBEDDING_BATCH_SIZE,
+          includeUrl
+        );
         const validGroupEmbeddings = groupTabEmbeddings.filter(emb => 
           Array.isArray(emb) && emb.length > 0
         );
@@ -1167,7 +1213,11 @@
 
     // Second pass: cluster remaining ungrouped tabs (only if we have enough)
     if (ungroupedTabs.length > 1) {
-      const ungroupedEmbeddings = await processTabsInBatches(ungroupedTabs);
+      const ungroupedEmbeddings = await processTabsInBatches(
+        ungroupedTabs,
+        CONFIG.EMBEDDING_BATCH_SIZE,
+        includeUrl
+      );
 
       // Filter out empty embeddings
       const validEmbeddings = ungroupedEmbeddings.filter(
@@ -1528,12 +1578,17 @@
       let aiTabTopics = [];
 
       if (sortMode === "topic" || sortMode === "hybrid") {
+        const includeUrlInAIText = sortMode === "hybrid";
         console.log(
-          "[TabSort] Debug - Starting AI grouping for",
+          `[TabSort] Debug - Starting AI grouping (${sortMode}) for`,
           initialTabsToSort.length,
-          "tabs"
+          "tabs",
+          includeUrlInAIText ? "[title+url]" : "[title]"
         );
-        aiTabTopics = await askAIForMultipleTopics(initialTabsToSort);
+        aiTabTopics = await askAIForMultipleTopics(
+          initialTabsToSort,
+          includeUrlInAIText
+        );
         console.log(
           "[TabSort] Debug - AI returned",
           aiTabTopics.length,
@@ -1922,54 +1977,120 @@
     }
   };
 
-  // --- Context Menu Items ---
-  function ensureContextMenuItems() {
-    const menu = document.getElementById("tabContextMenu");
-    if (!menu) return;
+  // --- Sidebar Context Menu ---
+  // Lucide icons (https://lucide.dev) inlined as data URIs. Using currentColor
+  // lets the theme recolor them via -moz-context-properties on menuitem-iconic.
+  const LUCIDE_ICONS = {
+    // layers — topic/groups
+    topicGroups:
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`
+      ),
+    // folder-tree — topic/folders
+    topicFolders:
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>`
+      ),
+    // globe — url/groups
+    urlGroups:
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`
+      ),
+    // folder-open — url/folders
+    urlFolders:
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>`
+      ),
+    // sparkles — hybrid/groups
+    hybridGroups:
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>`
+      ),
+    // wand-sparkles — hybrid/folders
+    hybridFolders:
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.64 3.64a1.35 1.35 0 0 0-1.91 0L14 9.37l.63.63 5.73-5.73a1.35 1.35 0 0 0 0-1.91z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/><path d="m9.5 14.5-1 1"/><path d="m16 16-3-3"/><path d="M13.29 13.29 3.15 23.43"/></svg>`
+      ),
+  };
 
-    // Prevent duplicates
-    if (menu.querySelector("#tidy-tabs-separator")) return;
+  // Ordered definition drives menu rendering + per-item preference gating.
+  const SIDEBAR_MENU_ITEMS = [
+    { id: "tidy-tabs-sort-topic-groups",   label: "Sort by Topic into Groups",   mode: "topic",  folders: false, prefKey: "MENU_TOPIC_GROUPS",   iconKey: "topicGroups"   },
+    { id: "tidy-tabs-sort-topic-folders",  label: "Sort by Topic into Folders",  mode: "topic",  folders: true,  prefKey: "MENU_TOPIC_FOLDERS",  iconKey: "topicFolders"  },
+    { id: "tidy-tabs-sort-url-groups",     label: "Sort by URL into Groups",     mode: "url",    folders: false, prefKey: "MENU_URL_GROUPS",     iconKey: "urlGroups"     },
+    { id: "tidy-tabs-sort-url-folders",    label: "Sort by URL into Folders",    mode: "url",    folders: true,  prefKey: "MENU_URL_FOLDERS",    iconKey: "urlFolders"    },
+    { id: "tidy-tabs-sort-hybrid-groups",  label: "Sort by Hybrid into Groups",  mode: "hybrid", folders: false, prefKey: "MENU_HYBRID_GROUPS",  iconKey: "hybridGroups"  },
+    { id: "tidy-tabs-sort-hybrid-folders", label: "Sort by Hybrid into Folders", mode: "hybrid", folders: true,  prefKey: "MENU_HYBRID_FOLDERS", iconKey: "hybridFolders" },
+  ];
 
-    const sep = document.createXULElement("menuseparator");
-    sep.id = "tidy-tabs-separator";
+  // Which containers count as the "sidebar empty area" trigger region.
+  // Right-clicks on actual tabs/groups are deferred to the native menu.
+  const SIDEBAR_TRIGGER_SELECTORS = [
+    "#tabbrowser-arrowscrollbox",
+    "#vertical-pinned-tabs-container",
+    ".zen-workspace-tabs-section",
+    "#zen-sidebar-foot-buttons",
+    ".pinned-tabs-container-separator",
+  ];
+  const SIDEBAR_IGNORE_SELECTOR =
+    "tab, tab-group, zen-folder, .tab-group-label-container, toolbarbutton, menuitem, .tab-close-button";
 
-    const sortTopicGroups = document.createXULElement("menuitem");
-    sortTopicGroups.id = "tidy-tabs-sort-topic-groups";
-    sortTopicGroups.setAttribute("label", "Sort by Topic into Groups");
-    sortTopicGroups.addEventListener("command", () => sortTabsByTopic("topic", false));
+  function buildSidebarContextMenu() {
+    const existing = document.getElementById("tidy-tabs-sidebar-menu");
+    if (existing) existing.remove();
 
-    const sortTopicFolders = document.createXULElement("menuitem");
-    sortTopicFolders.id = "tidy-tabs-sort-topic-folders";
-    sortTopicFolders.setAttribute("label", "Sort by Topic into Folders");
-    sortTopicFolders.addEventListener("command", () => sortTabsByTopic("topic", true));
+    const popup = document.createXULElement("menupopup");
+    popup.id = "tidy-tabs-sidebar-menu";
 
-    const sortUrlGroups = document.createXULElement("menuitem");
-    sortUrlGroups.id = "tidy-tabs-sort-url-groups";
-    sortUrlGroups.setAttribute("label", "Sort by URL into Groups");
-    sortUrlGroups.addEventListener("command", () => sortTabsByTopic("url", false));
+    let visibleCount = 0;
+    SIDEBAR_MENU_ITEMS.forEach((item) => {
+      if (!CONFIG[item.prefKey]) return;
+      const mi = document.createXULElement("menuitem");
+      mi.id = item.id;
+      mi.className = "menuitem-iconic tidy-tabs-menuitem";
+      mi.setAttribute("label", item.label);
+      mi.setAttribute("image", LUCIDE_ICONS[item.iconKey]);
+      mi.addEventListener("command", () =>
+        sortTabsByTopic(item.mode, item.folders)
+      );
+      popup.appendChild(mi);
+      visibleCount++;
+    });
 
-    const sortUrlFolders = document.createXULElement("menuitem");
-    sortUrlFolders.id = "tidy-tabs-sort-url-folders";
-    sortUrlFolders.setAttribute("label", "Sort by URL into Folders");
-    sortUrlFolders.addEventListener("command", () => sortTabsByTopic("url", true));
+    if (!visibleCount) return null;
 
-    const sortHybridGroups = document.createXULElement("menuitem");
-    sortHybridGroups.id = "tidy-tabs-sort-hybrid-groups";
-    sortHybridGroups.setAttribute("label", "Sort by Hybrid into Groups");
-    sortHybridGroups.addEventListener("command", () => sortTabsByTopic("hybrid", false));
+    const host =
+      document.getElementById("mainPopupSet") || document.documentElement;
+    host.appendChild(popup);
+    return popup;
+  }
 
-    const sortHybridFolders = document.createXULElement("menuitem");
-    sortHybridFolders.id = "tidy-tabs-sort-hybrid-folders";
-    sortHybridFolders.setAttribute("label", "Sort by Hybrid into Folders");
-    sortHybridFolders.addEventListener("command", () => sortTabsByTopic("hybrid", true));
+  function ensureSidebarContextMenu() {
+    const popup = buildSidebarContextMenu();
+    if (!popup) return;
 
-    menu.appendChild(sep);
-    menu.appendChild(sortTopicGroups);
-    menu.appendChild(sortTopicFolders);
-    menu.appendChild(sortUrlGroups);
-    menu.appendChild(sortUrlFolders);
-    menu.appendChild(sortHybridGroups);
-    menu.appendChild(sortHybridFolders);
+    const onContextMenu = (event) => {
+      // Ignore if user right-clicked an actual tab / group / control —
+      // those have their own native menus and shouldn't be hijacked.
+      const target = event.target;
+      if (target?.closest?.(SIDEBAR_IGNORE_SELECTOR)) return;
+      if (!target?.closest?.(SIDEBAR_TRIGGER_SELECTORS.join(","))) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      popup.openPopupAtScreen(event.screenX, event.screenY, true);
+    };
+
+    // Bind at sidebar root so we catch all empty-region right-clicks.
+    const sidebar =
+      document.getElementById("navigator-toolbox") || document.documentElement;
+    sidebar.addEventListener("contextmenu", onContextMenu, true);
   }
 
   // --- gZenWorkspaces Hooks ---
@@ -2209,7 +2330,7 @@
           gZenWorkspacesReady;
 
         if (ready) {
-          ensureContextMenuItems();
+          ensureSidebarContextMenu();
           setupgZenWorkspacesHooks();
           patchClearButtonToPreserveGroups(); // Patch the clear button
           treeConnectors = new TidyTabsTreeConnectors();
