@@ -1724,8 +1724,23 @@
     return den === 0 ? 0 : num / den;
   };
 
-  const prettifyLabel = (raw) => {
+  // Pretty-format a lowercased raw token into a group label.
+  // Acronym-aware: if `sourceTitles` are provided and the token appears
+  // UPPERCASE verbatim in any of them, honor that casing. This keeps
+  // groups labeled "DSA"/"CSS"/"API" instead of "Dsa"/"Css"/"Api".
+  const prettifyLabel = (raw, sourceTitles) => {
     if (!raw) return "Other";
+    if (
+      Array.isArray(sourceTitles) &&
+      sourceTitles.length &&
+      raw.length <= 5 &&
+      !raw.includes(" ") &&
+      sourceTitles.some(
+        (t) => typeof t === "string" && t.includes(raw.toUpperCase())
+      )
+    ) {
+      return raw.toUpperCase();
+    }
     return raw
       .split(/[\s\-_]+/)
       .filter(Boolean)
@@ -1771,7 +1786,8 @@
         return b[0].length - a[0].length;
       });
 
-    if (ranked.length) return prettifyLabel(ranked[0][0]);
+    const sourceTitles = clusterTabs.map((t) => getTabTitle(t));
+    if (ranked.length) return prettifyLabel(ranked[0][0], sourceTitles);
 
     // Fallback: most common hostname in the cluster.
     const hostCount = new Map();
@@ -1858,54 +1874,112 @@
     return consolidateSimilarGroupNames(finalGroups, existingNames);
   };
 
-  // Rescue pass for tabs the primary grouper (AI or fuzzy) left loose.
-  //   1. Collect tabs from `allTabs` that aren't a member of any group.
-  //   2. Bucket them by hostname; any host with ≥2 tabs becomes its own
-  //      group (or merges into an existing group with the same pretty
-  //      label). This is the big win for AI mode, where 3 youtube.com
-  //      tabs with semantically-different titles would otherwise stay
-  //      ungrouped.
-  //   3. If `useMisc` is on, remaining loose tabs (singletons / no-host)
-  //      are combined into a single "Miscellaneous" group so nothing is
-  //      left stranded in the sidebar.
-  const applyPostGroupingRescue = (allTabs, groups, useMisc) => {
+  // Small utility used by all rescue passes: which tabs in `allTabs` are
+  // NOT already a member of any group in `groups`?
+  const collectUngrouped = (allTabs, groups) => {
     const groupedSet = new Set();
     Object.values(groups).forEach((tabs) =>
       tabs.forEach((t) => groupedSet.add(t))
     );
+    return allTabs.filter((t) => t?.isConnected && !groupedSet.has(t));
+  };
 
-    const ungrouped = allTabs.filter(
-      (t) => t?.isConnected && !groupedSet.has(t)
-    );
+  // --- Rescue pass 1: shared-keyword ---
+  // Any distinctive token that appears in ≥2 ungrouped tabs becomes a
+  // group. Catches the classic "two DSA tabs on different sites stayed
+  // loose because AI embeddings weren't close enough" case.
+  //
+  // Greedy: pick the token covering the most tabs first; on ties prefer
+  // bigrams (more descriptive) and longer tokens. Tabs are assigned to
+  // at most one keyword group so we don't double-count.
+  const rescueByKeyword = (allTabs, groups) => {
+    const ungrouped = collectUngrouped(allTabs, groups);
+    if (ungrouped.length < 2) return groups;
+
+    const tokenToTabs = new Map();
+    ungrouped.forEach((tab) => {
+      const m = tokenizeTab(tab);
+      // Title tokens only — hostnames are handled separately and mixing
+      // them in here would produce host-named rescue groups, duplicating
+      // work the hostname pass already does.
+      const tokens = new Set([...m.titleUnigrams, ...m.titleBigrams]);
+      tokens.forEach((tok) => {
+        if (!tokenToTabs.has(tok)) tokenToTabs.set(tok, new Set());
+        tokenToTabs.get(tok).add(tab);
+      });
+    });
+
+    const ranked = [...tokenToTabs.entries()]
+      .filter(([, set]) => set.size >= 2)
+      .sort((a, b) => {
+        if (b[1].size !== a[1].size) return b[1].size - a[1].size;
+        const aBigram = a[0].includes(" ");
+        const bBigram = b[0].includes(" ");
+        if (aBigram !== bBigram) return aBigram ? -1 : 1;
+        return b[0].length - a[0].length;
+      });
+
+    const result = { ...groups };
+    const used = new Set();
+    for (const [tok, tabSet] of ranked) {
+      const available = [...tabSet].filter((t) => !used.has(t));
+      if (available.length < 2) continue;
+      const titles = available.map((t) => getTabTitle(t));
+      const label = prettifyLabel(tok, titles);
+      result[label] = (result[label] || []).concat(available);
+      available.forEach((t) => used.add(t));
+    }
+    return result;
+  };
+
+  // --- Rescue pass 2: shared-hostname ---
+  // Any host with ≥2 ungrouped tabs becomes a group (or merges with an
+  // existing group sharing the prettified host label). This is the win
+  // for AI mode with same-site tabs whose titles are semantically
+  // unrelated — e.g. 3 YouTube tabs (news video + channel + subs feed).
+  const rescueByHost = (allTabs, groups) => {
+    const ungrouped = collectUngrouped(allTabs, groups);
     if (!ungrouped.length) return groups;
 
     const byHost = new Map();
-    const noHost = [];
     ungrouped.forEach((t) => {
       const host = getTabHost(t);
-      if (!host) { noHost.push(t); return; }
+      if (!host) return;
       if (!byHost.has(host)) byHost.set(host, []);
       byHost.get(host).push(t);
     });
 
     const result = { ...groups };
-    const stillLoose = [];
     for (const [host, tabs] of byHost) {
-      if (tabs.length >= 2) {
-        const label = prettifyLabel(host.split(".")[0]);
-        result[label] = (result[label] || []).concat(tabs);
-      } else {
-        stillLoose.push(...tabs);
-      }
+      if (tabs.length < 2) continue;
+      const label = prettifyLabel(host.split(".")[0]);
+      result[label] = (result[label] || []).concat(tabs);
     }
-    stillLoose.push(...noHost);
-
-    if (useMisc && stillLoose.length >= 2) {
-      const miscLabel = "Miscellaneous";
-      result[miscLabel] = (result[miscLabel] || []).concat(stillLoose);
-    }
-
     return result;
+  };
+
+  // --- Rescue pass 3: Miscellaneous catchall (opt-out) ---
+  // Anything still loose — even a single tab — gets bucketed into a
+  // "Miscellaneous" group. The whole point of this catchall is to
+  // guarantee nothing is left stranded in the sidebar after a sort, so
+  // we don't gate it on ≥2 members the way other rescue passes do.
+  const rescueAsMiscellaneous = (allTabs, groups) => {
+    const stillLoose = collectUngrouped(allTabs, groups);
+    if (stillLoose.length === 0) return groups;
+    const result = { ...groups };
+    const label = "Miscellaneous";
+    result[label] = (result[label] || []).concat(stillLoose);
+    return result;
+  };
+
+  // Full rescue pipeline: keyword → host → misc. Keyword runs first
+  // because a shared distinctive topic word is a stronger signal of
+  // user intent than a shared hostname.
+  const applyPostGroupingRescue = (allTabs, groups, useMisc) => {
+    let g = rescueByKeyword(allTabs, groups);
+    g = rescueByHost(allTabs, g);
+    if (useMisc) g = rescueAsMiscellaneous(allTabs, g);
+    return g;
   };
 
   // Marker class on <html> while a sort is in-flight. Styled in
