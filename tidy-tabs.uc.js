@@ -35,6 +35,9 @@
     TREE_FOLDER_INDENT_PX: 12,
     TREE_RELATED_CHILD_INDENT_PX: 20,
     TREE_CONNECTOR_OFFSET_PX: -15,
+    SORT_ICON_SIZE: 24,
+    SORT_ICON_OPACITY: 1,
+    SORT_BUTTON_FONT_SIZE: 10,
   };
 
   const PREF_BRANCH = "zen.tidytabs.";
@@ -67,6 +70,9 @@
     TREE_FOLDER_INDENT_PX: ["int", "tree.folder-indent-px"],
     TREE_RELATED_CHILD_INDENT_PX: ["int", "tree.related-child-indent-px"],
     TREE_CONNECTOR_OFFSET_PX: ["int", "tree.connector-offset-px"],
+    SORT_ICON_SIZE: ["int", "ui.sort-button.icon-size"],
+    SORT_ICON_OPACITY: ["double", "ui.sort-button.icon-opacity"],
+    SORT_BUTTON_FONT_SIZE: ["int", "ui.sort-button.font-size"],
   };
 
   const services =
@@ -75,25 +81,59 @@
       .Services;
 
   const getPrefValue = (type, fullPrefName, fallbackValue) => {
+    // The Zen mod marketplace only exposes checkbox / dropdown / string input
+    // types, so numeric settings are stored as PREF_STRING when set via the
+    // settings UI. Fall back to the native-typed getter for prefs authored
+    // via about:config or older builds.
     try {
-      if (!services?.prefs?.prefHasUserValue(fullPrefName)) {
+      const prefs = services?.prefs;
+      if (!prefs?.prefHasUserValue(fullPrefName)) {
         return fallbackValue;
       }
-      if (type === "bool") {
-        return services.prefs.getBoolPref(fullPrefName, fallbackValue);
-      }
-      if (type === "int") {
-        return services.prefs.getIntPref(fullPrefName, fallbackValue);
-      }
-      if (type === "double") {
-        if (typeof services.prefs.getFloatPref === "function") {
-          return services.prefs.getFloatPref(fullPrefName, fallbackValue);
+
+      const prefType = prefs.getPrefType(fullPrefName);
+      const PREF_BOOL = prefs.PREF_BOOL ?? 128;
+      const PREF_INT = prefs.PREF_INT ?? 64;
+      const PREF_STRING = prefs.PREF_STRING ?? 32;
+
+      const readString = () => {
+        try {
+          return prefs.getStringPref(fullPrefName, `${fallbackValue}`);
+        } catch {
+          return `${fallbackValue}`;
         }
-        const numericString = services.prefs.getStringPref(
-          fullPrefName,
-          `${fallbackValue}`
-        );
-        const parsed = Number.parseFloat(numericString);
+      };
+
+      if (type === "bool") {
+        if (prefType === PREF_BOOL) {
+          return prefs.getBoolPref(fullPrefName, fallbackValue);
+        }
+        if (prefType === PREF_STRING) {
+          const raw = readString().trim().toLowerCase();
+          if (raw === "true" || raw === "1") return true;
+          if (raw === "false" || raw === "0") return false;
+        }
+        return fallbackValue;
+      }
+
+      if (type === "int" || type === "double") {
+        let raw;
+        if (prefType === PREF_INT) {
+          raw = prefs.getIntPref(fullPrefName, fallbackValue);
+        } else if (prefType === PREF_STRING) {
+          raw = readString();
+        } else if (
+          type === "double" &&
+          typeof prefs.getFloatPref === "function"
+        ) {
+          raw = prefs.getFloatPref(fullPrefName, fallbackValue);
+        } else {
+          return fallbackValue;
+        }
+        const parsed =
+          type === "int"
+            ? Number.parseInt(raw, 10)
+            : Number.parseFloat(raw);
         return Number.isFinite(parsed) ? parsed : fallbackValue;
       }
     } catch (error) {
@@ -403,6 +443,30 @@
       }
     `;
     document.documentElement.appendChild(style);
+  };
+
+  // Exposes the sort-button visual preferences as CSS variables so
+  // userChrome.css stays declarative and users can retune size/opacity
+  // without reloading the script.
+  const ensureSortButtonStyles = () => {
+    const styleId = "tidy-tabs-sort-button-style";
+    const iconSize = Math.max(8, CONFIG.SORT_ICON_SIZE);
+    const iconOpacity = Math.min(1, Math.max(0, CONFIG.SORT_ICON_OPACITY));
+    const fontSize = Math.max(6, CONFIG.SORT_BUTTON_FONT_SIZE);
+    const css = `
+      :root {
+        --zen-tidytabs-sort-icon-size: ${iconSize}px;
+        --zen-tidytabs-sort-icon-opacity: ${iconOpacity};
+        --zen-tidytabs-sort-font-size: ${fontSize}px;
+      }
+    `;
+    let style = document.getElementById(styleId);
+    if (!style) {
+      style = document.createElement("style");
+      style.id = styleId;
+      document.documentElement.appendChild(style);
+    }
+    style.textContent = css;
   };
 
   class TidyTabsTreeConnectors {
@@ -1705,6 +1769,13 @@
                 : false;
               if (tab && tab.isConnected && !isInGroupInCorrectWorkspace) {
                 if (existingGroupElement?.isZenFolder) {
+                  // Zen folders only hold pinned tabs, so pin before adding or
+                  // the tab appears to move but never attaches to the folder.
+                  try {
+                    if (!tab.pinned) gBrowser.pinTab(tab);
+                  } catch (pinErr) {
+                    console.warn("[TidyTabs] pinTab failed before addTabs:", pinErr);
+                  }
                   existingGroupElement.addTabs([tab]);
                 } else {
                   gBrowser.moveTabToExistingGroup(tab, existingGroupElement);
@@ -1742,18 +1813,40 @@
                   currentWorkspaceId
                 );
 
-                if (!createdContainer) {
-                  createdContainer = gZenFolders.createFolder([], {
-                    renameFolder: false,
-                    label: topic,
-                    workspaceId: currentWorkspaceId,
-                  });
-                }
-
                 if (createdContainer?.isConnected) {
-                  createdContainer.addTabs(tabsForThisTopic);
+                  // Existing folder: pin tabs first, then attach to folder.
+                  // Folders only accept pinned tabs (see ZenFolders.mjs createFolder).
+                  const tabsForFolder = tabsForThisTopic.filter(
+                    (t) => t?.isConnected
+                  );
+                  tabsForFolder.forEach((t) => {
+                    try {
+                      if (!t.pinned) gBrowser.pinTab(t);
+                    } catch (pinErr) {
+                      console.warn("[TidyTabs] pinTab failed:", pinErr);
+                    }
+                  });
+                  if (tabsForFolder.length) {
+                    createdContainer.addTabs(tabsForFolder);
+                  }
                   createdContainer.collapsed = false;
                   existingGroupElementsMap.set(topic, createdContainer);
+                } else {
+                  // Pass tabs directly to createFolder so it pins and attaches
+                  // them atomically. Passing [] then calling addTabs leaves the
+                  // folder empty because the tabs never get pinned.
+                  createdContainer = gZenFolders.createFolder(
+                    tabsForThisTopic.filter((t) => t?.isConnected),
+                    {
+                      renameFolder: false,
+                      label: topic,
+                      workspaceId: currentWorkspaceId,
+                    }
+                  );
+                  if (createdContainer?.isConnected) {
+                    createdContainer.collapsed = false;
+                    existingGroupElementsMap.set(topic, createdContainer);
+                  }
                 }
               } else {
                 const firstValidTabForGroup = tabsForThisTopic[0];
@@ -2426,6 +2519,7 @@
           gZenWorkspacesReady;
 
         if (ready) {
+          ensureSortButtonStyles();
           setupSortCommandAndListener();
           addSortButtonToAllSeparators();
           setupgZenWorkspacesHooks();

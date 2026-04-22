@@ -43,201 +43,178 @@
     "defaultValue": true
   },
   {
-    "type": "number",
-    "label": "AI: Similarity Threshold",
+    "type": "string",
+    "label": "AI: Similarity Threshold (0 - 1)",
     "property": "zen.tidytabs.ai.similarity-threshold",
-    "defaultValue": 0.45,
-    "min": 0,
-    "max": 1,
-    "step": 0.01
+    "defaultValue": "0.45",
+    "placeholder": "0.45"
   },
   {
-    "type": "number",
-    "label": "AI: Existing Group Similarity",
+    "type": "string",
+    "label": "AI: Existing Group Similarity (0 - 1)",
     "property": "zen.tidytabs.ai.group-similarity-threshold",
-    "defaultValue": 0.65,
-    "min": 0,
-    "max": 1,
-    "step": 0.01
+    "defaultValue": "0.65",
+    "placeholder": "0.65"
   },
   {
-    "type": "number",
-    "label": "AI: Existing Group Boost",
+    "type": "string",
+    "label": "AI: Existing Group Boost (0 - 1)",
     "property": "zen.tidytabs.ai.existing-group-boost",
-    "defaultValue": 0.1,
-    "min": 0,
-    "max": 1,
-    "step": 0.01
+    "defaultValue": "0.1",
+    "placeholder": "0.1"
   },
   {
-    "type": "number",
-    "label": "Grouping: Name Consolidation Distance",
+    "type": "string",
+    "label": "Grouping: Name Consolidation Distance (int)",
     "property": "zen.tidytabs.group.consolidation-distance-threshold",
-    "defaultValue": 2,
-    "min": 0,
-    "max": 10,
-    "step": 1
+    "defaultValue": "2",
+    "placeholder": "2"
   },
   {
-    "type": "number",
-    "label": "Performance: Embedding Batch Size",
+    "type": "string",
+    "label": "Performance: Embedding Batch Size (int)",
     "property": "zen.tidytabs.performance.embedding-batch-size",
-    "defaultValue": 5,
-    "min": 1,
-    "max": 20,
-    "step": 1
+    "defaultValue": "5",
+    "placeholder": "5"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Performance: Debounce Delay (ms)",
     "property": "zen.tidytabs.performance.debounce-delay",
-    "defaultValue": 250,
-    "min": 0,
-    "max": 2000,
-    "step": 25
+    "defaultValue": "250",
+    "placeholder": "250"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Performance: Max Init Checks",
     "property": "zen.tidytabs.performance.max-init-checks",
-    "defaultValue": 50,
-    "min": 1,
-    "max": 500,
-    "step": 1
+    "defaultValue": "50",
+    "placeholder": "50"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Performance: Init Check Interval (ms)",
     "property": "zen.tidytabs.performance.init-check-interval",
-    "defaultValue": 100,
-    "min": 25,
-    "max": 2000,
-    "step": 25
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "UI: Min Tabs for Sort Button",
     "property": "zen.tidytabs.ui.min-tabs-for-sort-button",
-    "defaultValue": 0,
-    "min": 0,
-    "max": 50,
-    "step": 1
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "type": "number",
+    "type": "string",
+    "label": "UI: Sort Button Icon Size (px)",
+    "property": "zen.tidytabs.ui.sort-button.icon-size",
+    "defaultValue": "24",
+    "placeholder": "24"
+  },
+  {
+    "type": "string",
+    "label": "UI: Sort Button Icon Opacity (0 - 1)",
+    "property": "zen.tidytabs.ui.sort-button.icon-opacity",
+    "defaultValue": "1",
+    "placeholder": "1"
+  },
+  {
+    "type": "string",
+    "label": "UI: Sort Button Font Size (px)",
+    "property": "zen.tidytabs.ui.sort-button.font-size",
+    "defaultValue": "10",
+    "placeholder": "10"
+  },
+  {
+    "type": "string",
     "label": "UI: Failure Wave Amplitude",
     "property": "zen.tidytabs.ui.failure-animation.amplitude",
-    "defaultValue": 8,
-    "min": 1,
-    "max": 24,
-    "step": 1
+    "defaultValue": "8",
+    "placeholder": "8"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "UI: Failure Wave Frequency",
     "property": "zen.tidytabs.ui.failure-animation.frequency",
-    "defaultValue": 20,
-    "min": 1,
-    "max": 60,
-    "step": 1
+    "defaultValue": "20",
+    "placeholder": "20"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "UI: Failure Wave Segments",
     "property": "zen.tidytabs.ui.failure-animation.segments",
-    "defaultValue": 100,
-    "min": 20,
-    "max": 300,
-    "step": 5
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "UI: Failure Pulse Duration (ms)",
     "property": "zen.tidytabs.ui.failure-animation.pulse-duration",
-    "defaultValue": 400,
-    "min": 100,
-    "max": 2000,
-    "step": 25
+    "defaultValue": "400",
+    "placeholder": "400"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "UI: Failure Pulse Count",
     "property": "zen.tidytabs.ui.failure-animation.pulse-count",
-    "defaultValue": 3,
-    "min": 1,
-    "max": 12,
-    "step": 1
+    "defaultValue": "3",
+    "placeholder": "3"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Tree: Trunk X Position",
     "property": "zen.tidytabs.tree.line-x",
-    "defaultValue": 6,
-    "min": 0,
-    "max": 30,
-    "step": 1
+    "defaultValue": "6",
+    "placeholder": "6"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Tree: Stroke Width",
     "property": "zen.tidytabs.tree.stroke-width",
-    "defaultValue": 2,
-    "min": 1,
-    "max": 6,
-    "step": 1
+    "defaultValue": "2",
+    "placeholder": "2"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Tree: Branch Radius",
     "property": "zen.tidytabs.tree.branch-radius",
-    "defaultValue": 7,
-    "min": 0,
-    "max": 24,
-    "step": 1
+    "defaultValue": "7",
+    "placeholder": "7"
   },
   {
-    "type": "number",
-    "label": "Tree: Connector Opacity",
+    "type": "string",
+    "label": "Tree: Connector Opacity (0 - 1)",
     "property": "zen.tidytabs.tree.opacity",
-    "defaultValue": 0.25,
-    "min": 0,
-    "max": 1,
-    "step": 0.05
+    "defaultValue": "0.25",
+    "placeholder": "0.25"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Tree: Branch Overshoot",
     "property": "zen.tidytabs.tree.branch-overshoot",
-    "defaultValue": 0,
-    "min": -20,
-    "max": 20,
-    "step": 1
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Tree: Folder Indent (px)",
     "property": "zen.tidytabs.tree.folder-indent-px",
-    "defaultValue": 12,
-    "min": 0,
-    "max": 40,
-    "step": 1
+    "defaultValue": "12",
+    "placeholder": "12"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Tree: Related Child Indent (px)",
     "property": "zen.tidytabs.tree.related-child-indent-px",
-    "defaultValue": 20,
-    "min": 0,
-    "max": 60,
-    "step": 1
+    "defaultValue": "20",
+    "placeholder": "20"
   },
   {
-    "type": "number",
+    "type": "string",
     "label": "Tree: Connector Offset (px)",
     "property": "zen.tidytabs.tree.connector-offset-px",
-    "defaultValue": -15,
-    "min": -40,
-    "max": 10,
-    "step": 1
+    "defaultValue": "-15",
+    "placeholder": "-15"
   }
 ]

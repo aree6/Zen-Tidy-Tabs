@@ -71,3 +71,13 @@ All settings are exposed in `preferences.json`.
 | Tree: Folder Indent (px) | `zen.tidytabs.tree.folder-indent-px` | `12` |
 | Tree: Related Child Indent (px) | `zen.tidytabs.tree.related-child-indent-px` | `20` |
 | Tree: Connector Offset (px) | `zen.tidytabs.tree.connector-offset-px` | `-15` |
+
+### Sort button appearance
+
+| Label | Pref | Default |
+|---|---|---|
+| UI: Sort Button Icon Size (px) | `zen.tidytabs.ui.sort-button.icon-size` | `24` |
+| UI: Sort Button Icon Opacity (0 - 1) | `zen.tidytabs.ui.sort-button.icon-opacity` | `1` |
+| UI: Sort Button Font Size (px) | `zen.tidytabs.ui.sort-button.font-size` | `10` |
+
+> **Note:** all numeric preferences are surfaced as `string` inputs (the only free-form type Zen Marketplace supports). Type your value and press Enter to apply.
