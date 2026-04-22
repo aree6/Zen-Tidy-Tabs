@@ -2074,44 +2074,71 @@
   };
 
   // --- Sidebar Context Menu ------------------------------------------------
-  // Menu items are injected into Zen's existing sidebar menu
-  // (`zenWorkspaceMoreActions`) so the user still sees every native option
-  // (Delete/Rename workspace, etc.) plus our sort actions beneath a
-  // menuseparator. If the native menu isn't present yet we poll for it, and
-  // if it never arrives we fall back to a private popup bound to right-click
-  // on the sidebar background — that way the feature still works on older
-  // Zen versions where the menu ID changed.
+  // Strategy (learned from the previous attempt):
   //
-  // Icon strategy: menuitems get a stable class name; the actual SVG is
-  // drawn by userChrome.css via list-style-image on
-  // `.menu-iconic-icon`. Using CSS sidesteps the inline-data-URI quirks
-  // that plagued the previous implementation (icons not rendering).
+  // 1. We can't rely on a specific popup ID (Zen has moved menus around and
+  //    the sidebar's context attribute varies by version).
+  // 2. Instead we watch ALL `popupshowing` events at the document root.
+  //    When a menupopup opens and its trigger node lives inside the sidebar
+  //    tabs area (but not on an actual tab/group/toolbarbutton), we append
+  //    our items to that popup — whatever its ID happens to be.
+  // 3. As a safety net, if the user right-clicks the sidebar and nothing
+  //    else handles the contextmenu, we open our own popup.
+  //
+  // Icon rendering: set the SVG via the `image` attribute using a base64
+  // data URI. This is the bullet-proof XUL path — unlike url-encoded
+  // data URIs or CSS list-style-image, it has worked on every Firefox
+  // chrome version for a decade. Stroke uses a neutral gray that reads
+  // on both light and dark themes (we can theme this later once the
+  // basic feature is visible).
 
   const SIDEBAR_MENU_ITEMS = [
     {
       id: "tidy-tabs-sort-groups",
       label: "Tidy Tabs into Groups",
-      iconClass: "tidy-tabs-icon-groups",
+      iconKey: "groups",
       prefKey: "MENU_SORT_GROUPS",
       useFolders: false,
     },
     {
       id: "tidy-tabs-sort-folders",
       label: "Tidy Tabs into Folders",
-      iconClass: "tidy-tabs-icon-folders",
+      iconKey: "folders",
       prefKey: "MENU_SORT_FOLDERS",
       useFolders: true,
     },
   ];
 
-  const NATIVE_SIDEBAR_MENU_ID = "zenWorkspaceMoreActions";
   const TIDY_TABS_MENU_ITEM_CLASS = "tidy-tabs-menuitem";
+
+  // Lucide icons with explicit stroke color (not context-dependent) so they
+  // render regardless of the host popup's styling. `#9a9a9a` looks neutral
+  // against both light and dark menus.
+  const TIDY_TABS_ICON_SVGS = {
+    // layers
+    groups:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`,
+    // folder-tree
+    folders:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>`,
+  };
+
+  const svgToDataURI = (svg) => {
+    try {
+      // btoa needs Latin-1; our SVGs are ASCII-only so this is safe.
+      return "data:image/svg+xml;base64," + btoa(svg);
+    } catch {
+      return "";
+    }
+  };
 
   function createTidyTabsMenuItem(item) {
     const mi = document.createXULElement("menuitem");
     mi.id = item.id;
-    mi.className = `menuitem-iconic ${TIDY_TABS_MENU_ITEM_CLASS} ${item.iconClass}`;
+    mi.className = `menuitem-iconic ${TIDY_TABS_MENU_ITEM_CLASS}`;
     mi.setAttribute("label", item.label);
+    const svg = TIDY_TABS_ICON_SVGS[item.iconKey];
+    if (svg) mi.setAttribute("image", svgToDataURI(svg));
     mi.addEventListener("command", () => sortTabsByTopic(item.useFolders));
     return mi;
   }
@@ -2120,10 +2147,12 @@
     return SIDEBAR_MENU_ITEMS.filter((item) => CONFIG[item.prefKey]);
   }
 
-  // Inject our items + leading separator into the given menupopup, only
-  // once. Safe to call repeatedly — no duplicates.
+  // Inject our items (plus a separator) into the given menupopup.
+  // Idempotent: skips if our items already live in the popup.
   function injectItemsInto(popup) {
-    if (!popup || popup.querySelector(`.${TIDY_TABS_MENU_ITEM_CLASS}`)) return;
+    if (!popup || popup.tagName !== "menupopup") return;
+    if (popup.querySelector(`.${TIDY_TABS_MENU_ITEM_CLASS}`)) return;
+
     const items = getEnabledMenuItems();
     if (!items.length) return;
 
@@ -2133,17 +2162,30 @@
     items.forEach((item) => popup.appendChild(createTidyTabsMenuItem(item)));
   }
 
-  // Try to attach to the native Zen sidebar menu. Returns true on success.
-  function tryAttachToNativeMenu() {
-    const native = document.getElementById(NATIVE_SIDEBAR_MENU_ID);
-    if (!native) return false;
-    injectItemsInto(native);
-    return true;
+  // Where in the DOM does a right-click count as "the sidebar tabs area"?
+  // We inject only when the trigger is inside one of these containers AND
+  // NOT on an interactive element that already has its own context menu.
+  const SIDEBAR_TRIGGER_SELECTOR =
+    "#tabbrowser-arrowscrollbox, .zen-workspace-tabs-section, " +
+    ".zen-workspace-empty-space, #vertical-pinned-tabs-container, " +
+    ".pinned-tabs-container-separator";
+  const SIDEBAR_IGNORE_SELECTOR =
+    "tab:not([zen-empty-tab]), tab-group > .tab-group-label-container, " +
+    "zen-folder > .tab-group-label-container, toolbarbutton, " +
+    ".tab-close-button";
+
+  function isSidebarBackgroundTrigger(node) {
+    if (!node) return false;
+    if (node.closest?.(SIDEBAR_IGNORE_SELECTOR)) return false;
+    return !!node.closest?.(SIDEBAR_TRIGGER_SELECTOR);
   }
 
-  // Fallback popup in case the native menu isn't available (future-proofing
-  // against ID renames). Bound only if native-menu attach failed.
-  function buildFallbackPopup() {
+  // Fallback popup, used only when the right-click wouldn't otherwise open
+  // a native menu (e.g. on the empty-space vbox which has no `context=`).
+  let fallbackPopup = null;
+  function ensureFallbackPopup() {
+    if (fallbackPopup?.isConnected) return fallbackPopup;
+
     const existing = document.getElementById("tidy-tabs-sidebar-menu");
     if (existing) existing.remove();
 
@@ -2155,66 +2197,59 @@
     items.forEach((item) => popup.appendChild(createTidyTabsMenuItem(item)));
 
     (document.getElementById("mainPopupSet") || document.documentElement).appendChild(popup);
+    fallbackPopup = popup;
     return popup;
   }
 
-  function bindFallbackContextMenu() {
-    const popup = buildFallbackPopup();
-    if (!popup) return;
-
-    const TRIGGERS = [
-      "#tabbrowser-arrowscrollbox",
-      ".zen-workspace-tabs-section",
-      ".zen-workspace-empty-space",
-    ];
-    const IGNORE =
-      "tab, tab-group, zen-folder, .tab-group-label-container, toolbarbutton, .tab-close-button";
-
-    document
-      .getElementById("navigator-toolbox")
-      ?.addEventListener(
-        "contextmenu",
-        (event) => {
-          const t = event.target;
-          if (!t?.closest?.(TRIGGERS.join(","))) return;
-          if (t.closest?.(IGNORE)) return;
-          event.preventDefault();
-          event.stopPropagation();
-          popup.openPopupAtScreen(event.screenX, event.screenY, true);
-        },
-        true
-      );
-  }
-
   function ensureSidebarContextMenu() {
-    if (tryAttachToNativeMenu()) return;
+    // Build (and stash) the fallback popup up front so it's ready to show
+    // on demand. Building it lazily from the contextmenu handler races
+    // with the event default.
+    ensureFallbackPopup();
 
-    // Native menu may be constructed lazily (first right-click). Watch the
-    // DOM briefly; if it never appears, fall back.
-    let tries = 0;
-    const tick = () => {
-      if (tryAttachToNativeMenu()) return;
-      if (++tries >= CONFIG.MAX_INIT_CHECKS) {
-        console.warn(
-          `[TidyTabs] native sidebar menu #${NATIVE_SIDEBAR_MENU_ID} not found, using fallback popup`
-        );
-        bindFallbackContextMenu();
-        return;
-      }
-      setTimeout(tick, CONFIG.INIT_CHECK_INTERVAL);
-    };
-    tick();
-
-    // Also listen for popupshowing on any descendant menupopup — Zen may
-    // construct the native menu on first open, so we catch it there too
-    // and inject before the user sees it.
+    // Primary path: intercept every popupshowing. If the popup was
+    // triggered from the sidebar background, inject our items.
     document.addEventListener(
       "popupshowing",
       (event) => {
         const popup = event.target;
-        if (popup?.id === NATIVE_SIDEBAR_MENU_ID) {
-          injectItemsInto(popup);
-        }
+        if (!popup || popup.tagName !== "menupopup") return;
+
+        // Don't self-inject into our own fallback popup (already populated).
+        if (popup.id === "tidy-tabs-sidebar-menu") return;
+
+        // Skip bookmarks/history/etc. menus where triggerNode is null.
+        const trigger = popup.triggerNode;
+        if (!isSidebarBackgroundTrigger(trigger)) return;
+
+        injectItemsInto(popup);
+      },
+      true
+    );
+
+    // Secondary path: right-clicks that don't open any native menu
+    // (e.g. the `.zen-workspace-empty-space` vbox) get our fallback.
+    // We defer with a 0ms timeout so if a native popup IS going to open,
+    // the default has already done so by the time we run.
+    document.addEventListener(
+      "contextmenu",
+      (event) => {
+        const trigger = event.target;
+        if (!isSidebarBackgroundTrigger(trigger)) return;
+
+        // If the event is already going to bring up a native menu (because
+        // an ancestor has `context="..."`), just let popupshowing handle it.
+        const hasNativeContext =
+          !!trigger.closest?.("[context]") ||
+          !!trigger.closest?.("[popup]");
+        if (hasNativeContext) return;
+
+        const popup = ensureFallbackPopup();
+        if (!popup) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        popup.openPopupAtScreen(event.screenX, event.screenY, true);
       },
       true
     );
