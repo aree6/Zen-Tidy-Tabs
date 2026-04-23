@@ -164,6 +164,27 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   border: none !important;
 }
 
+/* --- Favicon-tinted group/folder background for visual separation ------ */
+/* Uses the first child tab's favicon color as a subtle solid tint on    */
+/* the entire group/folder parent.                                       */
+
+zen-folder,
+tab-group:not(zen-folder) {
+  position: relative;
+}
+
+zen-folder::after,
+tab-group:not(zen-folder)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--zen-border-radius, 10px);
+  background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 7%, transparent);
+  pointer-events: none;
+  z-index: -1;
+  transition: background 0.3s ease;
+}
+
 /* --- Sort-in-progress pulse ------------------------------------------- */
 /* While the script is sorting, tabs gently dim and breathe. The effect
    is meant to be ambient — not distracting — so we keep the opacity band

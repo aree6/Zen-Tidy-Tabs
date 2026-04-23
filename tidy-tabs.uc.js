@@ -654,6 +654,86 @@
     style.textContent = TREE_CONNECTOR_CSS;
     document.documentElement.appendChild(style);
   };
+
+  // --- Favicon color sampling for group/folder background tint ---------
+
+  const FAVICON_COLOR_CACHE = new Map();
+
+  const sampleFaviconColor = (iconUrl) => {
+    if (FAVICON_COLOR_CACHE.has(iconUrl)) {
+      return Promise.resolve(FAVICON_COLOR_CACHE.get(iconUrl));
+    }
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = 4;
+          canvas.height = 4;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(img, 0, 0, 4, 4);
+          const data = ctx.getImageData(0, 0, 4, 4).data;
+          let r = 0, g = 0, b = 0, count = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] < 128) continue; // skip transparent pixels
+            r += data[i];
+            g += data[i + 1];
+            b += data[i + 2];
+            count++;
+          }
+          if (count === 0) {
+            FAVICON_COLOR_CACHE.set(iconUrl, null);
+            resolve(null);
+            return;
+          }
+          const color = `rgb(${Math.round(r / count)}, ${Math.round(g / count)}, ${Math.round(b / count)})`;
+          FAVICON_COLOR_CACHE.set(iconUrl, color);
+          resolve(color);
+        } catch (e) {
+          FAVICON_COLOR_CACHE.set(iconUrl, null);
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        FAVICON_COLOR_CACHE.set(iconUrl, null);
+        resolve(null);
+      };
+      img.src = iconUrl;
+    });
+  };
+
+  const refreshGroupFaviconColors = async () => {
+    if (!window.gBrowser) return;
+    const groups = document.querySelectorAll("zen-folder, tab-group:not(zen-folder)");
+    for (const group of groups) {
+      const firstTab = group.querySelector(".tabbrowser-tab");
+      if (!firstTab) {
+        if (group._tidyFaviconUrl) {
+          group.style.removeProperty("--tidy-tabs-favicon-color");
+          group._tidyFaviconUrl = null;
+        }
+        continue;
+      }
+      const iconImage = firstTab.querySelector(".tab-icon-image");
+      const iconUrl = iconImage?.src;
+      if (!iconUrl) {
+        if (group._tidyFaviconUrl) {
+          group.style.removeProperty("--tidy-tabs-favicon-color");
+          group._tidyFaviconUrl = null;
+        }
+        continue;
+      }
+      if (group._tidyFaviconUrl === iconUrl) continue;
+      group._tidyFaviconUrl = iconUrl;
+      const color = await sampleFaviconColor(iconUrl);
+      if (color) {
+        group.style.setProperty("--tidy-tabs-favicon-color", color);
+      } else {
+        group.style.removeProperty("--tidy-tabs-favicon-color");
+      }
+    }
+  };
+
   class TidyTabsTreeConnectors {
     constructor() {
       this.SVG_NS = "http://www.w3.org/2000/svg";
@@ -3041,6 +3121,7 @@
     events.forEach((eventName) => {
       gBrowser.tabContainer.addEventListener(eventName, () => {
         treeConnectors?.scheduleUpdate?.();
+        refreshGroupFaviconColors();
       });
     });
 
@@ -3092,6 +3173,7 @@
           treeConnectors = new TidyTabsTreeConnectors();
           treeConnectors.init();
           addTabEventListeners();
+          refreshGroupFaviconColors();
 
           return true;
         }
