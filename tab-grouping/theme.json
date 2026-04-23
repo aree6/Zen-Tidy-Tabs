@@ -20,7 +20,7 @@
   "tags": ["tabs", "grouping", "ai", "sorting", "Zen Browser", "Tab Groups"],
   "createdAt": "2026-04-23",
   "updatedAt": "2026-04-23",
-  "modules": ["zen-browser/theme-store"],
+  "modules": ["Vertex-Mods/Advanced-Tab-Groups"],
   "ai": "yes",
   "fork": ["zen"]
 }

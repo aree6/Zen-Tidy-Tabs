@@ -20,6 +20,6 @@
   "tags": ["tree", "connectors", "ui", "folders", "Zen Browser"],
   "createdAt": "2026-04-23",
   "updatedAt": "2026-04-23",
-  "modules": ["zen-browser/theme-store"],
+  "modules": ["Vertex-Mods/Advanced-Tab-Groups"],
   "fork": ["zen"]
 }

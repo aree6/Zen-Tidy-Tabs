@@ -37,13 +37,17 @@
     // into a single "Miscellaneous" group so nothing is left stranded.
     // Turn off if you prefer leftovers to stay loose in the sidebar.
     GROUP_LEFTOVERS_AS_MISC: true,
-    // Grouping backend. "local" keeps everything on-device (Firefox ML
-    // embeddings + local topic naming). Any other value must be a key in
-    // OPENROUTER_MODELS below and routes the ENTIRE grouping decision
-    // through OpenRouter using the user's API key.
-    AI_GROUP_NAMER: "local",
-    // OpenRouter API key. Only read when AI_GROUP_NAMER != "local".
-    // Stored verbatim in the pref store; empty string disables the path.
+    // Single-dropdown grouping engine. Each option is independent:
+    //   local      -> Firefox on-device ML only
+    //   openrouter -> OpenRouter LLM only (needs model + API key)
+    //   fuzzy      -> deterministic token/hostname clustering only
+    //   hybrid     -> tries OpenRouter, then local AI, then fuzzy
+    // No cross-category silent fallbacks for non-hybrid modes.
+    GROUPING_ENGINE: "hybrid",
+    // OpenRouter model slug (separate from engine choice so the dropdown
+    // never mixes "local" with API-key model names).
+    OPENROUTER_MODEL: "ling-flash",
+    // OpenRouter API key. Empty string disables the OpenRouter path.
     OPENROUTER_API_KEY: "",
     // Optional comma/newline-separated host list that should stay loose
     // (never auto-grouped), e.g. "mail.google.com, calendar.google.com".
@@ -80,51 +84,18 @@
     };
   };
 
-  const chooseGroupingEngine = (tabs) => {
-    const validTabs = (tabs || []).filter((tab) => tab?.isConnected);
-    if (validTabs.length < 2) {
-      return {
-        engine: "fuzzy",
-        reason: "Not enough tabs for model clustering",
-      };
-    }
-
-    if (validTabs.length > MAX_TABS_FOR_MODEL_GROUPING) {
-      return {
-        engine: "fuzzy",
-        reason: `Large batch (${validTabs.length} tabs)`,
-      };
-    }
-
-    const titleSignal = getTitleSignalStats(validTabs);
-    const lowSignal =
-      titleSignal.ratio < MIN_TITLE_SIGNAL_RATIO_FOR_MODEL_GROUPING;
-
-    if (isOpenRouterConfigured() && !lowSignal) {
-      return {
-        engine: "openrouter",
-        reason: `OpenRouter configured + strong title signal (${titleSignal.meaningful}/${titleSignal.total})`,
-      };
-    }
-
-    if (isAIEnabled() && !lowSignal) {
-      return {
-        engine: "local-ai",
-        reason: `Local AI available + strong title signal (${titleSignal.meaningful}/${titleSignal.total})`,
-      };
-    }
-
-    if (isOpenRouterConfigured() || isAIEnabled()) {
-      return {
-        engine: "fuzzy",
-        reason: `Low title signal (${titleSignal.meaningful}/${titleSignal.total})`,
-      };
-    }
-
-    return {
-      engine: "fuzzy",
-      reason: "AI disabled",
-    };
+  // Return the user-selected engine from the dropdown. If the selected
+  // engine is unavailable (e.g. "local" but browser.ml.enabled is off,
+  // or "openrouter" but no API key), returns "none" so the caller can
+  // surface a clear failure. Hybrid is always considered available because
+  // it contains its own fallback chain.
+  const getSelectedEngine = () => {
+    const choice = (CONFIG.GROUPING_ENGINE || "hybrid").trim().toLowerCase();
+    if (choice === "hybrid") return "hybrid";
+    if (choice === "local") return isAIEnabled() ? "local-ai" : "none";
+    if (choice === "openrouter") return isOpenRouterConfigured() ? "openrouter" : "none";
+    if (choice === "fuzzy") return "fuzzy";
+    return "none";
   };
 
   // Short dropdown slug -> OpenRouter model ID. Slugs are used as the pref
@@ -133,13 +104,9 @@
   //
   // Picks (researched Apr 2026 against openrouter.ai/collections/free-models
   // for this specific use case — short topic-label generation from tab titles):
-  //   - gemma3-27b:   balanced speed + quality, strong short-label outputs
-  //   - llama33-70b:  most accurate free instruct model, best fallback quality
   //   - ling-flash:   explicitly "flash" model (7.4B active), lowest latency
-  //   - glm-air:      lightweight MoE with non-thinking mode for real-time
+  //   - glm-air:      lightweight MoE with hybrid inference (reasoning field)
   const OPENROUTER_MODELS = {
-    "gemma3-27b": "google/gemma-3-27b-it:free",
-    "llama33-70b": "meta-llama/llama-3.3-70b-instruct:free",
     "ling-flash": "inclusionai/ling-2.6-flash:free",
     "glm-air": "z-ai/glm-4.5-air:free",
   };
@@ -152,7 +119,8 @@
     MENU_SORT_GROUPS: ["bool", "menu.sort-groups"],
     MENU_SORT_FOLDERS: ["bool", "menu.sort-folders"],
     GROUP_LEFTOVERS_AS_MISC: ["bool", "group-leftovers-as-misc"],
-    AI_GROUP_NAMER: ["string", "ai.group-namer"],
+    GROUPING_ENGINE: ["string", "grouping-engine"],
+    OPENROUTER_MODEL: ["string", "openrouter.model"],
     OPENROUTER_API_KEY: ["string", "openrouter.api-key"],
     PROTECTED_HOSTS: ["string", "behavior.protected-hosts"],
   };
@@ -518,9 +486,8 @@
   };
 
   const isOpenRouterConfigured = () => {
-    const slug = (CONFIG.AI_GROUP_NAMER || "local").trim();
-    if (!slug || slug === "local") return false;
-    if (!OPENROUTER_MODELS[slug]) return false;
+    const slug = (CONFIG.OPENROUTER_MODEL || "").trim();
+    if (!slug || !OPENROUTER_MODELS[slug]) return false;
     return !!(CONFIG.OPENROUTER_API_KEY || "").trim();
   };
 
@@ -570,7 +537,7 @@
     const validTabs = (tabs || []).filter((t) => t?.isConnected);
     if (validTabs.length < 2) return null; // nothing meaningful to cluster
 
-    const modelSlug = (CONFIG.AI_GROUP_NAMER || "").trim();
+    const modelSlug = (CONFIG.OPENROUTER_MODEL || "").trim();
     const modelId = OPENROUTER_MODELS[modelSlug];
     const apiKey = (CONFIG.OPENROUTER_API_KEY || "").trim();
 
@@ -645,7 +612,7 @@
       }
 
       const json = await response.json();
-      const content = json?.choices?.[0]?.message?.content;
+      const content = json?.choices?.[0]?.message?.content || json?.choices?.[0]?.message?.reasoning;
       const parsed = parseGroupingJson(content);
       if (!parsed) return null;
       const flatGroups = flattenNestedGroups(parsed);
@@ -1692,7 +1659,7 @@
 
   // --- Mode Detection -----------------------------------------------------
   // Firefox exposes `browser.ml.enabled`; if it is off (or the pref is
-  // missing) we must fall back to deterministic fuzzy grouping.
+  // missing) local AI grouping is unavailable.
   const isAIEnabled = () => {
     try {
       return services?.prefs?.getBoolPref?.("browser.ml.enabled", false) ?? false;
@@ -2221,31 +2188,28 @@
         return;
       }
 
-      // --- Build Final Groups ---
-      // Engine priority (first match wins):
-      //   1. OpenRouter — full one-shot grouping + naming via remote LLM
-      //      when the user has configured a model + API key. Replaces
-      //      local embeddings entirely because a capable LLM clusters
-      //      better (cross-tab context) AND it's actually cheaper:
-      //      1 request per sort vs N embedding calls + M naming calls.
-      //   2. Local Firefox ML (`browser.ml.enabled` = true) — on-device
-      //      embeddings for clustering + Mozilla/smart-tab-topic for names.
-      //   3. Fuzzy — deterministic token + hostname Jaccard clustering,
-      //      no model required. Also the fallback when either remote
-      //      path errors out (network, rate limit, bad JSON, etc).
+      // --- Engine selection ---
+      // The dropdown controls the grouping backend. Each non-hybrid option
+      // is independent: selecting "OpenRouter" never silently falls back to
+      // fuzzy, and selecting "Fuzzy" never touches the network. Only "Hybrid"
+      // chains: OpenRouter → local AI → fuzzy.
       let finalGroups = {};
       let aiTabTopics = [];
-      // Whether the chosen engine actually returned groups (pre-rescue).
-      // Used by the failure-animation check below so we don't shake the
-      // separator when the model worked but every group happened to be a
-      // singleton that got absorbed by rescue passes.
       let engineProducedGroups = false;
-      const engineDecision = chooseGroupingEngine(initialTabsToSort);
-      console.log(
-        `[TabSort] Engine selected: ${engineDecision.engine} (${engineDecision.reason})`
-      );
+      let usedFuzzy = false;
+      const engine = getSelectedEngine();
+      console.log(`[TabSort] Engine selected: ${engine}`);
 
-      if (engineDecision.engine === "openrouter") {
+      if (engine === "none") {
+        console.warn(
+          `[TabSort] Selected engine is unavailable. Check preferences (e.g. missing API key for OpenRouter, or browser.ml.enabled off for Local AI).`
+        );
+        if (CONFIG.ENABLE_FAILURE_ANIMATION) startFailureAnimation();
+        return;
+      }
+
+      // ----- OpenRouter -----
+      if (engine === "openrouter" || engine === "hybrid") {
         console.log(
           "[TabSort] Using OpenRouter full-grouping for",
           initialTabsToSort.length,
@@ -2262,21 +2226,18 @@
             allExistingGroupNames
           );
           engineProducedGroups = true;
-        } else {
-          // Any OpenRouter failure (null response, empty groups) silently
-          // degrades to fuzzy so the user still gets a sort. Fuzzy is the
-          // fallback (not local AI) because it has no external dependency
-          // and is deterministic — if OpenRouter broke mid-sort, we want
-          // something guaranteed to produce *some* grouping.
-          console.log("[TabSort] OpenRouter returned nothing; falling back to fuzzy.");
-          finalGroups = fuzzyGroupByTokens(
-            initialTabsToSort,
-            allExistingGroupNames
-          );
         }
-      } else if (engineDecision.engine === "local-ai") {
+      }
+
+      // ----- Local AI -----
+      if (
+        (engine === "local-ai" || (engine === "hybrid" && !engineProducedGroups)) &&
+        isAIEnabled()
+      ) {
         console.log(
-          "[TabSort] Using local AI grouping for",
+          engine === "hybrid"
+            ? "[TabSort] OpenRouter returned nothing; trying local AI..."
+            : "[TabSort] Using local AI grouping for",
           initialTabsToSort.length,
           "tabs"
         );
@@ -2291,33 +2252,37 @@
           if (!finalGroups[topic]) finalGroups[topic] = [];
           finalGroups[topic].push(tab);
         });
-
         finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
         engineProducedGroups = aiTabTopics.length > 0;
-      } else {
+      }
+
+      // ----- Fuzzy -----
+      if (
+        engine === "fuzzy" ||
+        (engine === "hybrid" && !engineProducedGroups)
+      ) {
         console.log(
-          "[TabSort] AI disabled — using fuzzy grouping for",
+          engine === "hybrid"
+            ? "[TabSort] Local AI unavailable; falling back to fuzzy..."
+            : "[TabSort] Using fuzzy grouping for",
           initialTabsToSort.length,
           "tabs"
         );
         finalGroups = fuzzyGroupByTokens(initialTabsToSort, allExistingGroupNames);
         engineProducedGroups = Object.keys(finalGroups).length > 0;
+        usedFuzzy = true;
       }
 
       // --- Rescue ungrouped tabs ---
-      // The AI path in particular loves to leave same-site tabs ungrouped
-      // whenever their titles don't share semantics (e.g. a news video +
-      // a channel page + a subscriptions feed all on youtube.com). A
-      // hostname fallback is a cheap, strong prior that fixes this.
-      //
-      // After hostname rescue, anything still loose optionally goes into
-      // a single "Miscellaneous" bucket so the user's sidebar ends up
-      // fully tidied rather than partially.
-      finalGroups = applyPostGroupingRescue(
-        initialTabsToSort,
-        finalGroups,
-        CONFIG.GROUP_LEFTOVERS_AS_MISC
-      );
+      // Rescue passes are fuzzy post-processing: they only run when fuzzy
+      // was actually used (either as the primary engine or as hybrid fallback).
+      if (usedFuzzy) {
+        finalGroups = applyPostGroupingRescue(
+          initialTabsToSort,
+          finalGroups,
+          CONFIG.GROUP_LEFTOVERS_AS_MISC
+        );
+      }
 
       // --- Failure check ---
       // We animate the spiky "failure" only when there's genuinely nothing

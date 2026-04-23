@@ -14,30 +14,43 @@
       "defaultValue": true
     },
     {
-      "property": "zen.tabgrouping.ai.group-namer",
-      "label": "AI group naming backend",
+      "property": "zen.tabgrouping.grouping-engine",
+      "label": "Grouping engine",
       "type": "dropdown",
       "disabledOn": [],
-      "defaultValue": "local",
+      "defaultValue": "hybrid",
       "options": [
+        {
+          "label": "Hybrid (OpenRouter → Local AI → Fuzzy)",
+          "value": "hybrid"
+        },
+        {
+          "label": "OpenRouter",
+          "value": "openrouter"
+        },
         {
           "label": "Local AI (on-device)",
           "value": "local"
         },
         {
-          "label": "OpenRouter - gemma3-27b",
-          "value": "gemma3-27b"
-        },
+          "label": "Fuzzy",
+          "value": "fuzzy"
+        }
+      ]
+    },
+    {
+      "property": "zen.tabgrouping.openrouter.model",
+      "label": "OpenRouter model",
+      "type": "dropdown",
+      "disabledOn": [],
+      "defaultValue": "ling-flash",
+      "options": [
         {
-          "label": "OpenRouter - llama33-70b",
-          "value": "llama33-70b"
-        },
-        {
-          "label": "OpenRouter - ling-flash",
+          "label": "ling-flash",
           "value": "ling-flash"
         },
         {
-          "label": "OpenRouter - glm-air",
+          "label": "glm-air",
           "value": "glm-air"
         }
       ]
