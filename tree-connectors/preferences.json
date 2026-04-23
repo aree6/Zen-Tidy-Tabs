@@ -1,0 +1,53 @@
+{
+  "preferences": [
+    {
+      "property": "zen.treeconnectors.enabled",
+      "label": "Enable tree connectors",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": true
+    },
+    {
+      "property": "zen.treeconnectors.include-related-tabs",
+      "label": "Draw connectors for related (child) tabs",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": true
+    },
+    {
+      "property": "zen.treeconnectors.refresh-on-animations",
+      "label": "Refresh connectors during animations",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": true
+    },
+    {
+      "property": "zen.treeconnectors.line-x",
+      "label": "Horizontal line offset (px)",
+      "type": "string",
+      "disabledOn": [],
+      "defaultValue": "6"
+    },
+    {
+      "property": "zen.treeconnectors.stroke-width",
+      "label": "Connector stroke width (px)",
+      "type": "string",
+      "disabledOn": [],
+      "defaultValue": "2"
+    },
+    {
+      "property": "zen.treeconnectors.branch-radius",
+      "label": "Branch corner radius (px)",
+      "type": "string",
+      "disabledOn": [],
+      "defaultValue": "7"
+    },
+    {
+      "property": "zen.treeconnectors.opacity",
+      "label": "Connector opacity (0-1)",
+      "type": "string",
+      "disabledOn": [],
+      "defaultValue": "0.25"
+    }
+  ]
+}

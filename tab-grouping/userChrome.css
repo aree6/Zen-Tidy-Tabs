@@ -1,0 +1,129 @@
+.pinned-tabs-container-separator {
+  overflow: visible !important;
+}
+
+.pinned-tabs-container-separator svg {
+  width: 100% !important;
+  height: 1px;
+  min-height: 1px !important;
+  display: block;
+  overflow: visible;
+  transition: width 0.15s ease-in-out;
+  min-width: 0;
+  margin: auto 4px !important;
+  flex-grow: 1;
+}
+
+.pinned-tabs-container-separator.has-no-sortable-tabs {
+  max-height: 0 !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  gap: 0 !important;
+}
+
+.pinned-tabs-container-separator.has-no-sortable-tabs svg {
+  display: none !important;
+  width: 0 !important;
+  opacity: 0 !important;
+}
+
+#vertical-pinned-tabs-container .zen-workspace-tabs-section[hide-separator] .pinned-tabs-container-separator {
+  max-height: 0 !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  gap: 0 !important;
+}
+
+.tab-is-sorting .tab-icon-image,
+.tab-is-sorting .tab-label {
+  animation: loading-pulse-tab 1.5s ease-in-out infinite;
+  will-change: opacity;
+}
+
+@keyframes tidy-fade-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* --- Sidebar context-menu (Tab Grouping) --- */
+menuitem.tab-grouping-menuitem > .menu-iconic-left > .menu-iconic-icon,
+menuitem.tab-grouping-menuitem .menu-iconic-icon {
+  width: 16px !important;
+  height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+  margin-inline-end: 6px;
+  opacity: 0.9;
+}
+
+/* --- Minimal tab-group styling --- */
+tab-group:not(zen-folder) {
+  --tab-group-color: transparent !important;
+  --tab-group-color-invert: transparent !important;
+  --tab-group-color-pale: transparent !important;
+}
+
+tab-group:not(zen-folder) > .tab-group-label-container {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 10px 12px 4px !important;
+  margin: 4px 0 0 !important;
+  position: relative;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  min-height: 28px;
+}
+
+tab-group:not(zen-folder) > .tab-group-label-container::after {
+  display: none !important;
+}
+
+tab-group:not(zen-folder) .tab-group-label {
+  color: var(--sidebar-text-color, var(--toolbar-color)) !important;
+  opacity: 0.65 !important;
+  font-weight: 600 !important;
+  font-size: 0.72em !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+tab-group:not(zen-folder) .tab-group-label-container:hover .tab-group-label {
+  opacity: 0.9 !important;
+}
+
+tab-group:not(zen-folder) > .tabbrowser-tab::before,
+tab-group:not(zen-folder) > .tab-group-container::before,
+tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
+  display: none !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+/* --- Sort-in-progress pulse --- */
+@keyframes tidy-tabs-sort-pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.4; }
+}
+
+:root.tidy-tabs-sorting .tabbrowser-tab,
+:root.tidy-tabs-sorting tab-group > .tab-group-label-container,
+:root.tidy-tabs-sorting zen-folder > .tab-group-label-container {
+  animation: tidy-tabs-sort-pulse 1.5s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root.tidy-tabs-sorting .tabbrowser-tab,
+  :root.tidy-tabs-sorting tab-group > .tab-group-label-container,
+  :root.tidy-tabs-sorting zen-folder > .tab-group-label-container {
+    animation: none;
+    opacity: 0.7;
+    transition: opacity 0.2s ease-out;
+  }
+}

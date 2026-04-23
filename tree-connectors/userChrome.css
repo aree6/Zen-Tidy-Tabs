@@ -1,0 +1,47 @@
+.separator-path-segment {
+  stroke: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.2)) !important;
+}
+
+[lwt-toolbar="light"] .separator-path-segment {
+  stroke: rgba(0, 0, 0, 0.2) !important;
+}
+
+.pinned-tabs-container-separator {
+  overflow: visible !important;
+}
+
+.pinned-tabs-container-separator svg {
+  width: 100% !important;
+  height: 1px;
+  min-height: 1px !important;
+  display: block;
+  overflow: visible;
+  transition: width 0.15s ease-in-out;
+  min-width: 0;
+  margin: auto 4px !important;
+  flex-grow: 1;
+}
+
+.pinned-tabs-container-separator.has-no-sortable-tabs {
+  max-height: 0 !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  gap: 0 !important;
+}
+
+.pinned-tabs-container-separator.has-no-sortable-tabs svg {
+  display: none !important;
+  width: 0 !important;
+  opacity: 0 !important;
+}
+
+#vertical-pinned-tabs-container .zen-workspace-tabs-section[hide-separator] .pinned-tabs-container-separator {
+  max-height: 0 !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  gap: 0 !important;
+}
