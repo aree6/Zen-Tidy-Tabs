@@ -547,7 +547,9 @@
     const lines = validTabs.map((tab, i) => {
       const title = (getTabTitle(tab) || "Untitled").slice(0, 140);
       const host = getTabHost(tab) || "—";
-      return `${i + 1}. [${host}] ${title}`;
+      // Hostname is secondary context — put it at the end so the model
+      // focuses on the title's semantic topic, not the domain.
+      return `${i + 1}. ${title}  (${host})`;
     });
 
     const existingHint =
@@ -558,17 +560,29 @@
         : "";
 
     const systemPrompt = useFolders
-      ? "Group tabs by topic intent, not hostname. Return a single JSON object.\n\n" +
+      ? "You are a tab-topic classifier. Group tabs by SEMANTIC TOPIC / user intent. NEVER by hostname, domain, or website name.\n\n" +
         "FLAT: {\"Topic\": [1,2], \"Other\": [3,4]}\n" +
         "NESTED (rare): {\"Broad\": {\"Sub A\": [1,2], \"Sub B\": [3,4]}, \"Flat\": [5,6]}\n\n" +
+        "CRITICAL — topic vs hostname examples:\n" +
+        "WRONG (hostname-based): {\"YouTube\": [1,2,3], \"GitHub\": [4,5]}\n" +
+        "RIGHT (topic-based):    {\"Cooking\": [1], \"Gaming\": [2], \"Travel\": [3], \"Code Review\": [4], \"DevOps\": [5]}\n\n" +
         "Nesting rules:\n" +
         "- ONLY nest when a broad theme clearly splits into 2+ distinct sub-themes with 2+ tabs each.\n" +
         "- If a sub-theme has 1 tab, or a parent has 1 child, or a topic has <4 tabs total — keep FLAT.\n" +
         "- Prefer FLAT. Nesting must improve UX, not create empty hierarchy.\n" +
+        "- NEVER create groups named after websites, domains, or hostnames (e.g. \"YouTube\", \"Google\", \"GitHub\").\n" +
+        "- If tabs share a host but have different topics, they MUST go in different groups or be omitted.\n" +
         "- Max 2 levels. Omit unmatched tabs. No markdown, no prose."
-      : "Group tabs by topic intent, not hostname(unless nothing is clear). Return a single flat JSON object.\n\n" +
+      : "You are a tab-topic classifier. Group tabs by SEMANTIC TOPIC / user intent. NEVER by hostname, domain, or website name.\n\n" +
         "Format: {\"Topic\": [1,2], \"Other\": [3,4]}\n\n" +
-        "Rules: every tab at most once; omit unmatched tabs; reuse existing names; no markdown, no prose.";
+        "CRITICAL — topic vs hostname examples:\n" +
+        "WRONG (hostname-based): {\"YouTube\": [1,2,3], \"GitHub\": [4,5]}\n" +
+        "RIGHT (topic-based):    {\"Cooking\": [1], \"Gaming\": [2], \"Travel\": [3], \"Code Review\": [4], \"DevOps\": [5]}\n\n" +
+        "Rules:\n" +
+        "- NEVER create groups named after websites, domains, or hostnames (e.g. \"YouTube\", \"Google\", \"GitHub\").\n" +
+        "- If tabs share a host but have different topics, they MUST go in different groups or be omitted.\n" +
+        "- Group by the user's interest/intent, not by where the content is hosted.\n" +
+        "- Every tab at most once; omit unmatched tabs; reuse existing names; no markdown, no prose.";
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
 
@@ -2277,12 +2291,25 @@
       // Rescue passes are fuzzy post-processing: they only run when fuzzy
       // was actually used (either as the primary engine or as hybrid fallback).
       if (usedFuzzy) {
+        console.log(
+          `[TabSort] Running post-grouping rescue passes on ${Object.keys(finalGroups).length} initial group(s).`
+        );
         finalGroups = applyPostGroupingRescue(
           initialTabsToSort,
           finalGroups,
           CONFIG.GROUP_LEFTOVERS_AS_MISC
         );
+      } else {
+        console.log(
+          "[TabSort] Skipping rescue passes — engine was AI/OpenRouter, rescue is fuzzy-only."
+        );
       }
+
+      const finalGroupNames = Object.keys(finalGroups);
+      console.log(
+        `[TabSort] Final groups (${finalGroupNames.length}):`,
+        finalGroupNames.map((n) => `${n} (${finalGroups[n].length})`).join(", ")
+      );
 
       // --- Failure check ---
       // We animate the spiky "failure" only when there's genuinely nothing
