@@ -341,9 +341,41 @@
     return name || "Group";
   };
 
+  // Sanitize a path like "Development → Frontend" by cleaning each segment
+  // independently so the arrow delimiter and overall structure survive.
+  const sanitizeGroupPath = (rawPath) => {
+    if (!rawPath.includes(" → ")) {
+      return sanitizeGroupName(rawPath);
+    }
+    return rawPath
+      .split(" → ")
+      .map((segment) => sanitizeGroupName(segment.trim()))
+      .join(" → ");
+  };
+
   // True iff the user has both picked a non-"local" OpenRouter model AND
   // supplied an API key. Cheap guard so call sites can short-circuit before
   // building prompts or engine state.
+  // Convert a potentially nested grouping JSON into flat "Parent → Child" keys.
+  // This preserves nesting info in the key name while keeping the rest of
+  // the pipeline (rescue passes, dedupe logic, existing-group matching) unchanged.
+  const NESTED_GROUP_DELIMITER = " → ";
+  const flattenNestedGroups = (parsed) => {
+    const result = {};
+    const walk = (obj, parentPath = "") => {
+      for (const [key, value] of Object.entries(obj)) {
+        const currentPath = parentPath ? `${parentPath}${NESTED_GROUP_DELIMITER}${key}` : key;
+        if (Array.isArray(value)) {
+          result[currentPath] = value;
+        } else if (value && typeof value === "object") {
+          walk(value, currentPath);
+        }
+      }
+    };
+    walk(parsed);
+    return result;
+  };
+
   const isOpenRouterConfigured = () => {
     const slug = (CONFIG.AI_GROUP_NAMER || "local").trim();
     if (!slug || slug === "local") return false;
@@ -418,14 +450,29 @@
         : "";
 
     const systemPrompt =
-      "You organize browser tabs into topic groups. You will receive a numbered list of tabs " +
-      "formatted as: `N. [hostname] title`. Return ONLY a single JSON object where each key is " +
-      "a concise topic name (1-3 words, Title Case, Human readable names UX matters.) and each value is an array of tab numbers " +
-      "belonging to that group. Requirements: " +
-      "(1) Every tab number appears in AT MOST one group. " +
-      "(2) Skip tabs that don't fit a clear group (omit them rather than inventing vague buckets). " +
-      "(3) Reuse provided existing group names when appropriate. " +
-      "(4) No markdown fences, no prose, no commentary — just the JSON object.";
+      "You organize browser tabs into hierarchical topic groups to reduce cognitive load. " +
+      "Topic-based grouping helps users maintain context and navigate related content without " +
+      "mentally switching between unrelated subjects. When many tabs share a broad theme but " +
+      "can be subdivided into distinct sub-themes, use nested grouping for clarity.\n\n" +
+      "You will receive a numbered list of tabs formatted as: `N. [hostname] title`.\n\n" +
+      "Return ONLY a single JSON object. The format supports two levels:\n" +
+      "- FLAT: each key is a topic name (1-3 words, Title Case) with an array of tab numbers.\n" +
+      "- NESTED: use nested objects when 5+ tabs share a broad theme with clear sub-themes. " +
+      "The parent key is a broad topic, and child keys are sub-topics with their tab arrays.\n\n" +
+      "Example FLAT structure (best for < 5 tabs per theme or when sub-themes aren't distinct):\n" +
+      '{"Development": [1,2,3], "Research": [4,5], "News": [6,7,8]}\n\n' +
+      "Example NESTED structure (use when broad topics like 'Development' have clear sub-divisions):\n" +
+      '{"Development": {"Frontend": [1,2], "Backend": [3,4,5], "DevOps": [6]}, "Research": [7,8,9], "News": [10,11]}\n\n' +
+      "Use NESTED grouping when:\n" +
+      "- A broad topic has 5+ tabs that clearly split into sub-themes (e.g., Frontend/Backend for dev).\n" +
+      "- Sub-themes are meaningfully different (users would want to expand/collapse separately).\n" +
+      "Otherwise keep it FLAT for simplicity.\n\n" +
+      "Requirements:\n" +
+      "(1) Every tab number appears in AT MOST one group (nested counts as one path).\n" +
+      "(2) Skip tabs that don't fit a clear group (omit them rather than inventing vague buckets).\n" +
+      "(3) Reuse provided existing group names when appropriate.\n" +
+      "(4) Maximum 2 levels deep: parent → child only (no deeper nesting).\n" +
+      "(5) No markdown fences, no prose, no commentary — just the JSON object.";
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
 
@@ -472,6 +519,8 @@
       const content = json?.choices?.[0]?.message?.content;
       const parsed = parseGroupingJson(content);
       if (!parsed) return null;
+      const flatGroups = flattenNestedGroups(parsed);
+      if (Object.keys(flatGroups).length === 0) return null;
 
       // Map 1-based indices back to real tab objects. We also dedupe in
       // case the model accidentally lists a tab under two topics; first
@@ -480,9 +529,9 @@
       const fallbackTitles = validTabs.map((t) => getTabTitle(t));
       const result = {};
 
-      for (const [rawName, indices] of Object.entries(parsed)) {
+      for (const [rawName, indices] of Object.entries(flatGroups)) {
         if (!Array.isArray(indices)) continue;
-        const cleanName = sanitizeGroupName(rawName, fallbackTitles);
+        const cleanName = sanitizeGroupPath(rawName);
         if (!cleanName) continue;
 
         const tabsForGroup = [];
@@ -582,6 +631,75 @@
     return Array.from(document.querySelectorAll(selector)).find(
       (folder) => folder?.isConnected && !folder?.group?.isZenFolder
     );
+  };
+
+  const findSubFolderByLabel = (parentFolder, label) => {
+    if (!parentFolder?.isConnected || !label) return null;
+    const safeLabel = label.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const container = parentFolder.querySelector(":scope > .tab-group-container");
+    if (!container) return null;
+    return Array.from(container.querySelectorAll(`zen-folder[label="${safeLabel}"]`)).find(
+      (folder) => folder?.isConnected && folder?.isZenFolder
+    );
+  };
+
+  const ensureNestedFolder = async (pathParts, tabs, workspaceId) => {
+    if (!Array.isArray(pathParts) || pathParts.length !== 2) return null;
+    const [parentName, childName] = pathParts;
+
+    let parentFolder = findTopLevelFolderByLabel(parentName, workspaceId);
+    if (!parentFolder?.isConnected) {
+      try {
+        parentFolder = gZenFolders.createFolder([], {
+          renameFolder: false,
+          label: parentName,
+          workspaceId,
+        });
+      } catch (e) {
+        console.error(`[TidyTabs] Failed to create parent folder "${parentName}":`, e);
+        return null;
+      }
+    }
+    if (!parentFolder?.isConnected) return null;
+    parentFolder.collapsed = false;
+
+    let childFolder = findSubFolderByLabel(parentFolder, childName);
+    if (!childFolder?.isConnected) {
+      const seedTabs = tabs.length > 0 ? [tabs[0]] : [];
+      const remainingTabs = tabs.length > 1 ? tabs.slice(1) : [];
+      try {
+        childFolder = gZenFolders.createFolder(seedTabs, {
+          renameFolder: false,
+          label: childName,
+          workspaceId,
+        });
+        if (parentFolder.tabs?.[0] && childFolder?.isConnected) {
+          parentFolder.tabs[0].after(childFolder);
+        }
+        if (remainingTabs.length) {
+          remainingTabs.forEach((t) => {
+            try { if (!t.pinned) gBrowser.pinTab(t); } catch {}
+          });
+          childFolder.addTabs(remainingTabs);
+        }
+      } catch (e) {
+        console.error(`[TidyTabs] Failed to create subfolder "${childName}" in "${parentName}":`, e);
+        return null;
+      }
+    }
+
+    if (!childFolder?.isConnected) return null;
+
+    const validTabs = tabs.filter((t) => t?.isConnected);
+    if (validTabs.length) {
+      validTabs.forEach((t) => {
+        try { if (!t.pinned) gBrowser.pinTab(t); } catch {}
+      });
+      childFolder.addTabs(validTabs);
+    }
+    childFolder.collapsed = false;
+
+    return childFolder;
   };
 
   // --- Folder Tree Connectors ---
@@ -2569,44 +2687,58 @@
               let createdContainer = null;
 
               if (useFolders && typeof gZenFolders?.createFolder === "function") {
-                createdContainer = findTopLevelFolderByLabel(
-                  topic,
-                  currentWorkspaceId
-                );
-
-                if (createdContainer?.isConnected) {
-                  // Existing folder: pin tabs first, then attach to folder.
-                  // Folders only accept pinned tabs (see ZenFolders.mjs createFolder).
-                  const tabsForFolder = tabsForThisTopic.filter(
-                    (t) => t?.isConnected
-                  );
-                  tabsForFolder.forEach((t) => {
-                    try {
-                      if (!t.pinned) gBrowser.pinTab(t);
-                    } catch (pinErr) {
-                      console.warn("[TidyTabs] pinTab failed:", pinErr);
+                if (topic.includes(NESTED_GROUP_DELIMITER)) {
+                  const pathParts = topic.split(NESTED_GROUP_DELIMITER);
+                  if (pathParts.length === 2) {
+                    createdContainer = await ensureNestedFolder(
+                      pathParts,
+                      tabsForThisTopic,
+                      currentWorkspaceId
+                    );
+                    if (createdContainer?.isConnected) {
+                      existingGroupElementsMap.set(topic, createdContainer);
                     }
-                  });
-                  if (tabsForFolder.length) {
-                    createdContainer.addTabs(tabsForFolder);
                   }
-                  createdContainer.collapsed = false;
-                  existingGroupElementsMap.set(topic, createdContainer);
                 } else {
-                  // Pass tabs directly to createFolder so it pins and attaches
-                  // them atomically. Passing [] then calling addTabs leaves the
-                  // folder empty because the tabs never get pinned.
-                  createdContainer = gZenFolders.createFolder(
-                    tabsForThisTopic.filter((t) => t?.isConnected),
-                    {
-                      renameFolder: false,
-                      label: topic,
-                      workspaceId: currentWorkspaceId,
-                    }
+                  createdContainer = findTopLevelFolderByLabel(
+                    topic,
+                    currentWorkspaceId
                   );
+
                   if (createdContainer?.isConnected) {
+                    // Existing folder: pin tabs first, then attach to folder.
+                    // Folders only accept pinned tabs (see ZenFolders.mjs createFolder).
+                    const tabsForFolder = tabsForThisTopic.filter(
+                      (t) => t?.isConnected
+                    );
+                    tabsForFolder.forEach((t) => {
+                      try {
+                        if (!t.pinned) gBrowser.pinTab(t);
+                      } catch (pinErr) {
+                        console.warn("[TidyTabs] pinTab failed:", pinErr);
+                      }
+                    });
+                    if (tabsForFolder.length) {
+                      createdContainer.addTabs(tabsForFolder);
+                    }
                     createdContainer.collapsed = false;
                     existingGroupElementsMap.set(topic, createdContainer);
+                  } else {
+                    // Pass tabs directly to createFolder so it pins and attaches
+                    // them atomically. Passing [] then calling addTabs leaves the
+                    // folder empty because the tabs never get pinned.
+                    createdContainer = gZenFolders.createFolder(
+                      tabsForThisTopic.filter((t) => t?.isConnected),
+                      {
+                        renameFolder: false,
+                        label: topic,
+                        workspaceId: currentWorkspaceId,
+                      }
+                    );
+                    if (createdContainer?.isConnected) {
+                      createdContainer.collapsed = false;
+                      existingGroupElementsMap.set(topic, createdContainer);
+                    }
                   }
                 }
               } else {
