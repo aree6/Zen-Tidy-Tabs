@@ -48,5 +48,26 @@
     "label": "Group leftover tabs under 'Miscellaneous' — when off, ungrouped tabs stay loose in the sidebar",
     "property": "zen.tidytabs.group-leftovers-as-misc",
     "defaultValue": true
+  },
+  {
+    "type": "string",
+    "label": "OpenRouter API Key — paste your key from openrouter.ai/keys to enable remote group naming. Leave empty to stay on the local Firefox model.",
+    "property": "zen.tidytabs.openrouter.api-key",
+    "defaultValue": "",
+    "placeholder": "sk-or-v1-..."
+  },
+  {
+    "type": "dropdown",
+    "label": "AI Group Namer — which model labels your clusters. Local is the default Firefox on-device model; the rest call OpenRouter (requires API key above). Embeddings/clustering stay local either way.",
+    "property": "zen.tidytabs.ai.group-namer",
+    "defaultValue": "local",
+    "placeholder": "Local (Firefox ML)",
+    "options": [
+      { "label": "Local — Firefox ML (default, offline)", "value": "local" },
+      { "label": "OpenRouter — Ling-2.6 Flash (fastest)", "value": "ling-flash" },
+      { "label": "OpenRouter — Llama 3.3 70B (most accurate)", "value": "llama33-70b" },
+      { "label": "OpenRouter — Gemma 3 27B (balanced)", "value": "gemma3-27b" },
+      { "label": "OpenRouter — GLM 4.5 Air (balanced)", "value": "glm-air" }
+    ]
   }
 ]

@@ -48,6 +48,31 @@
     // into a single "Miscellaneous" group so nothing is left stranded.
     // Turn off if you prefer leftovers to stay loose in the sidebar.
     GROUP_LEFTOVERS_AS_MISC: true,
+    // Group-naming backend. "local" = Firefox's built-in Mozilla/smart-tab-topic
+    // engine (default, offline). Any other value must be a key in
+    // OPENROUTER_MODELS below and will route naming through OpenRouter using
+    // the user's API key. Embeddings stay local either way.
+    AI_GROUP_NAMER: "local",
+    // OpenRouter API key. Only read when AI_GROUP_NAMER != "local".
+    // Stored verbatim in the pref store; empty string disables the path.
+    OPENROUTER_API_KEY: "",
+  };
+
+  // Short dropdown slug -> OpenRouter model ID. Slugs are used as the pref
+  // value (safer across Zen's dropdown schema than slashes/colons), and the
+  // mapped ID is what we send in the API request body.
+  //
+  // Picks (researched Apr 2026 against openrouter.ai/collections/free-models
+  // for this specific use case — short topic-label generation from tab titles):
+  //   - gemma3-27b:   balanced speed + quality, strong short-label outputs
+  //   - llama33-70b:  most accurate free instruct model, best fallback quality
+  //   - ling-flash:   explicitly "flash" model (7.4B active), lowest latency
+  //   - glm-air:      lightweight MoE with non-thinking mode for real-time
+  const OPENROUTER_MODELS = {
+    "gemma3-27b": "google/gemma-3-27b-it:free",
+    "llama33-70b": "meta-llama/llama-3.3-70b-instruct:free",
+    "ling-flash": "inclusionai/ling-2.6-flash:free",
+    "glm-air": "z-ai/glm-4.5-air:free",
   };
 
   const PREF_BRANCH = "zen.tidytabs.";
@@ -59,6 +84,8 @@
     MENU_SORT_GROUPS: ["bool", "menu.sort-groups"],
     MENU_SORT_FOLDERS: ["bool", "menu.sort-folders"],
     GROUP_LEFTOVERS_AS_MISC: ["bool", "group-leftovers-as-misc"],
+    AI_GROUP_NAMER: ["string", "ai.group-namer"],
+    OPENROUTER_API_KEY: ["string", "openrouter.api-key"],
   };
 
   const services =
@@ -293,6 +320,95 @@
       .split(" ")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
+  };
+
+  // Shared post-processor for AI-generated group names (both local and
+  // OpenRouter paths). Collapses whitespace, strips wrapping punctuation,
+  // rejects unsafe / empty outputs, and caps length so groups stay legible.
+  // `fallbackTitles` is used when the model's answer is unusable — we pull
+  // the first meaningful chunk of the first title as a last resort.
+  const sanitizeGroupName = (rawName, fallbackTitles = []) => {
+    let name = (rawName || "").toString().split("\n").map((l) => l.trim()).find((l) => l) || "";
+    name = toTitleCase(name);
+    if (!name || /none|adult content/i.test(name)) {
+      const first = (fallbackTitles[0] || "").toString();
+      name = first.split("–")[0].trim().slice(0, 24);
+    }
+    name = name
+      .replace(/^['"`]+|['"`]+$/g, "")
+      .replace(/[.?!,:;]+$/, "")
+      .slice(0, 24);
+    return name || "Group";
+  };
+
+  // Call OpenRouter's /chat/completions to name a cluster. Returns the raw
+  // string on success, or null on any failure (missing pref, unknown slug,
+  // HTTP error, timeout, malformed JSON) — caller is responsible for falling
+  // back to the local Mozilla/smart-tab-topic engine.
+  //
+  // Chrome-privileged fetch: this script runs as a user chrome script, so
+  // it can reach arbitrary origins without CSP restrictions. We still set a
+  // 10s timeout via AbortController so a slow free-tier model can't stall
+  // the sort pipeline.
+  const nameGroupWithOpenRouter = async (titles, keywords) => {
+    const modelSlug = (CONFIG.AI_GROUP_NAMER || "local").trim();
+    if (!modelSlug || modelSlug === "local") return null;
+
+    const modelId = OPENROUTER_MODELS[modelSlug];
+    if (!modelId) return null;
+
+    const apiKey = (CONFIG.OPENROUTER_API_KEY || "").trim();
+    if (!apiKey) return null;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const body = {
+        model: modelId,
+        // Short, deterministic output: we want a single clean label.
+        max_tokens: 16,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You name browser tab groups. Given keywords and tab titles, respond with ONE concise category name of 1-3 words in Title Case. No punctuation, no quotes, no explanation — just the name.",
+          },
+          {
+            role: "user",
+            content: `Keywords: ${keywords.join(", ")}\n\nTitles:\n${titles.join("\n")}\n\nCategory name:`,
+          },
+        ],
+      };
+
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          // Identifies this mod in OpenRouter's rankings (optional per docs).
+          "HTTP-Referer": "https://github.com/aree6/Zen-Tidy-Tabs",
+          "X-OpenRouter-Title": "Zen Tidy Tabs",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        console.warn(`[TabSort][OpenRouter] HTTP ${response.status} from ${modelId}; falling back to local.`);
+        return null;
+      }
+
+      const json = await response.json();
+      const content = json?.choices?.[0]?.message?.content;
+      return typeof content === "string" && content.trim() ? content : null;
+    } catch (e) {
+      console.warn(`[TabSort][OpenRouter] Request failed for ${modelId}; falling back to local.`, e);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
   const levenshteinDistance = (a, b) => {
@@ -1323,9 +1439,19 @@
             return keywords;
           }
 
-          // Group naming function
+          // Group naming function. Routes to OpenRouter when the user has
+          // selected a non-"local" model AND provided an API key; otherwise
+          // falls through to Firefox's built-in Mozilla/smart-tab-topic.
+          // Any OpenRouter failure (network, rate limit, bad key, ...)
+          // silently degrades to the local engine so sorting never breaks.
           async function nameGroupWithSmartTabTopic(titles) {
             const keywords = extractKeywords(titles);
+
+            // 1. OpenRouter branch — only reached when configured.
+            const remote = await nameGroupWithOpenRouter(titles, keywords);
+            if (remote) return sanitizeGroupName(remote, titles);
+
+            // 2. Local branch — default path, identical to the original logic.
             const input = `Topic from keywords: ${keywords.join(
               ", "
             )}. titles:\n${titles.join("\n")}`;
@@ -1346,21 +1472,10 @@
                 options: { max_new_tokens: 8, temperature: 0.7 },
               });
 
-              let name = (aiResult[0]?.generated_text || "Group")
-                .split("\n")
-                .map((l) => l.trim())
-                .find((l) => l);
-
-              name = toTitleCase(name);
-              if (!name || /none|adult content/i.test(name)) {
-                name = titles[0].split("–")[0].trim().slice(0, 24);
-              }
-
-              name = name
-                .replace(/^['"`]+|['"`]+$/g, "")
-                .replace(/[.?!,:;]+$/, "")
-                .slice(0, 24);
-              return name || "Group";
+              return sanitizeGroupName(
+                aiResult[0]?.generated_text || "Group",
+                titles
+              );
             } catch (e) {
               console.error("[TabSort][AI] Error naming group:", e);
               return "Group";

@@ -42,5 +42,25 @@ Both entries use the same engine under the hood:
 | Menu: Show 'Tidy Tabs into Groups' | `zen.tidytabs.menu.sort-groups` | `true` |
 | Menu: Show 'Tidy Tabs into Folders' | `zen.tidytabs.menu.sort-folders` | `true` |
 | Group leftovers as 'Miscellaneous' | `zen.tidytabs.group-leftovers-as-misc` | `true` |
+| OpenRouter API Key | `zen.tidytabs.openrouter.api-key` | `""` |
+| AI Group Namer | `zen.tidytabs.ai.group-namer` | `local` |
 
 > **Tip:** **Grouping Strength** (0–1) is a single knob that drives both AI and fuzzy modes. **0 = conservative** (only near-identical tabs group); **1 = aggressive** (loosely-related tabs still group). Default `0.5` is balanced. Disable either menu entry if you only use one container style.
+
+## Optional: OpenRouter for smarter group names
+
+By default, tab groups are named by Firefox's on-device `Mozilla/smart-tab-topic` model — no network, no API key, no cost. If you'd prefer crisper labels, you can route *just the naming step* (clustering stays local) through a free OpenRouter model.
+
+1. Grab a free API key at [openrouter.ai/keys](https://openrouter.ai/keys).
+2. Paste it into **OpenRouter API Key** in the mod settings.
+3. Pick a model from **AI Group Namer**:
+
+| Option | Model | Why |
+|---|---|---|
+| `local` *(default)* | `Mozilla/smart-tab-topic` (on-device) | Offline, zero cost, tiny latency |
+| `gemma3-27b` | `google/gemma-3-27b-it:free` | Balanced speed + label quality |
+| `llama33-70b` | `meta-llama/llama-3.3-70b-instruct:free` | Most accurate free instruct model |
+| `ling-flash` | `inclusionai/ling-2.6-flash:free` | Explicit "flash" model — lowest latency |
+| `glm-air` | `z-ai/glm-4.5-air:free` | Lightweight MoE with real-time mode |
+
+If the OpenRouter call fails for any reason (rate limit, network, bad key), naming transparently falls back to the local model so sorting never breaks.
