@@ -1,5 +1,4 @@
-{
-  "preferences": [
+[
     {
       "property": "zen.tabgrouping.grouping-strength",
       "label": "Grouping strength",
@@ -93,4 +92,3 @@
       "defaultValue": true
     }
   ]
-}

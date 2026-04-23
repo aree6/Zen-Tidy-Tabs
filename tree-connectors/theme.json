@@ -2,14 +2,24 @@
   "id": "zen-tree-connectors",
   "name": "Zen Tree Connectors",
   "description": "Visual tree connectors for Zen Browser folder tabs and tab groups",
-  "style": "https://github.com/areeb/zen-tree-connectors/tree-connectors/userChrome.css",
-  "readme": "https://github.com/areeb/zen-tree-connectors/tree-connectors/README.md",
+  "scripts": {
+    "tree-connectors.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ]
+    }
+  },
+  "homepage": "https://github.com/aree6/Zen-Tidy-Tabs/tree/main/tree-connectors",
+  "style": {
+    "chrome": "userChrome.css"
+  },
+  "preferences": "preferences.json",
+  "readme": "https://raw.githubusercontent.com/aree6/Zen-Tidy-Tabs/main/tree-connectors/README.md",
+  "author": "aree6",
   "version": "1.0.0",
-  "preferences": "https://github.com/areeb/zen-tree-connectors/tree-connectors/preferences.json",
-  "tags": ["tree", "connectors", "ui", "folders"],
+  "tags": ["tree", "connectors", "ui", "folders", "Zen Browser"],
   "createdAt": "2026-04-23",
   "updatedAt": "2026-04-23",
-  "scripts": [
-    "tree-connectors.uc.js"
-  ]
+  "modules": ["zen-browser/theme-store"],
+  "fork": ["zen"]
 }

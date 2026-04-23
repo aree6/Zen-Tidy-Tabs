@@ -1,5 +1,4 @@
-{
-  "preferences": [
+[
     {
       "property": "zen.treeconnectors.enabled",
       "label": "Enable tree connectors",
@@ -50,4 +49,3 @@
       "defaultValue": "0.25"
     }
   ]
-}

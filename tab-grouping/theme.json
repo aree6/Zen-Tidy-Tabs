@@ -2,14 +2,25 @@
   "id": "zen-tab-grouping",
   "name": "Zen Tab Grouping",
   "description": "AI-powered tab sorting and grouping for Zen Browser",
-  "style": "https://github.com/areeb/zen-tab-grouping/tab-grouping/userChrome.css",
-  "readme": "https://github.com/areeb/zen-tab-grouping/tab-grouping/README.md",
+  "scripts": {
+    "tab-grouping.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ]
+    }
+  },
+  "homepage": "https://github.com/aree6/Zen-Tidy-Tabs/tree/main/tab-grouping",
+  "style": {
+    "chrome": "userChrome.css"
+  },
+  "preferences": "preferences.json",
+  "readme": "https://raw.githubusercontent.com/aree6/Zen-Tidy-Tabs/main/tab-grouping/README.md",
+  "author": "aree6",
   "version": "1.0.0",
-  "preferences": "https://github.com/areeb/zen-tab-grouping/tab-grouping/preferences.json",
-  "tags": ["tabs", "grouping", "ai", "sorting"],
+  "tags": ["tabs", "grouping", "ai", "sorting", "Zen Browser", "Tab Groups"],
   "createdAt": "2026-04-23",
   "updatedAt": "2026-04-23",
-  "scripts": [
-    "tab-grouping.uc.js"
-  ]
+  "modules": ["zen-browser/theme-store"],
+  "ai": "yes",
+  "fork": ["zen"]
 }
