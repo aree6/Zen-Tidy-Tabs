@@ -576,7 +576,7 @@
   //
   // Privacy: we send title + hostname only. Full URLs (path + query) are
   // deliberately excluded to avoid leaking viewing history.
-  const askOpenRouterForGroups = async (tabs, existingGroupNames) => {
+  const askOpenRouterForGroups = async (tabs, existingGroupNames, useFolders = false) => {
     if (!isOpenRouterConfigured()) return null;
 
     const validTabs = (tabs || []).filter((t) => t?.isConnected);
@@ -602,30 +602,18 @@
           ].join(", ")}`
         : "";
 
-    const systemPrompt =
-      "You organize browser tabs into hierarchical topic groups to reduce cognitive load. " +
-      "Topic-based grouping helps users maintain context and navigate related content without " +
-      "mentally switching between unrelated subjects. When many tabs share a broad theme but " +
-      "can be subdivided into distinct sub-themes, use nested grouping for clarity.\n\n" +
-      "You will receive a numbered list of tabs formatted as: `N. [hostname] title`.\n\n" +
-      "Return ONLY a single JSON object. The format supports two levels:\n" +
-      "- FLAT: each key is a topic name (1-3 words, Title Case) with an array of tab numbers.\n" +
-      "- NESTED: use nested objects when 5+ tabs share a broad theme with clear sub-themes. " +
-      "The parent key is a broad topic, and child keys are sub-topics with their tab arrays.\n\n" +
-      "Example FLAT structure (best for < 5 tabs per theme or when sub-themes aren't distinct):\n" +
-      '{"Development": [1,2,3], "Research": [4,5], "News": [6,7,8]}\n\n' +
-      "Example NESTED structure (use when broad topics like 'Development' have clear sub-divisions):\n" +
-      '{"Development": {"Frontend": [1,2], "Backend": [3,4,5], "DevOps": [6]}, "Research": [7,8,9], "News": [10,11]}\n\n' +
-      "Use NESTED grouping when:\n" +
-      "- A broad topic has 5+ tabs that clearly split into sub-themes (e.g., Frontend/Backend for dev).\n" +
-      "- Sub-themes are meaningfully different (users would want to expand/collapse separately).\n" +
-      "Otherwise keep it FLAT for simplicity.\n\n" +
-      "Requirements:\n" +
-      "(1) Every tab number appears in AT MOST one group (nested counts as one path).\n" +
-      "(2) Skip tabs that don't fit a clear group (omit them rather than inventing vague buckets).\n" +
-      "(3) Reuse provided existing group names when appropriate.\n" +
-      "(4) Maximum 2 levels deep: parent → child only (no deeper nesting).\n" +
-      "(5) No markdown fences, no prose, no commentary — just the JSON object.";
+    const systemPrompt = useFolders
+      ? "Group tabs by topic intent, not hostname. Return a single JSON object.\n\n" +
+        "FLAT: {\"Topic\": [1,2], \"Other\": [3,4]}\n" +
+        "NESTED (rare): {\"Broad\": {\"Sub A\": [1,2], \"Sub B\": [3,4]}, \"Flat\": [5,6]}\n\n" +
+        "Nesting rules:\n" +
+        "- ONLY nest when a broad theme clearly splits into 2+ distinct sub-themes with 2+ tabs each.\n" +
+        "- If a sub-theme has 1 tab, or a parent has 1 child, or a topic has <4 tabs total — keep FLAT.\n" +
+        "- Prefer FLAT. Nesting must improve UX, not create empty hierarchy.\n" +
+        "- Max 2 levels. Omit unmatched tabs. No markdown, no prose."
+      : "Group tabs by topic intent, not hostname(unless nothing is clear). Return a single flat JSON object.\n\n" +
+        "Format: {\"Topic\": [1,2], \"Other\": [3,4]}\n\n" +
+        "Rules: every tab at most once; omit unmatched tabs; reuse existing names; no markdown, no prose.";
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
 
@@ -2803,7 +2791,8 @@
         );
         const remoteGroups = await askOpenRouterForGroups(
           initialTabsToSort,
-          allExistingGroupNames
+          allExistingGroupNames,
+          useFolders
         );
         if (remoteGroups && Object.keys(remoteGroups).length > 0) {
           finalGroups = consolidateSimilarGroupNames(
@@ -2992,12 +2981,62 @@
                       tabsForThisTopic,
                       currentWorkspaceId
                     );
-                    upsertContainerByLabel(
-                      existingContainersByLabel,
-                      topic,
-                      "folder",
-                      createdContainer
+                    if (createdContainer?.isConnected) {
+                      upsertContainerByLabel(
+                        existingContainersByLabel,
+                        topic,
+                        "folder",
+                        createdContainer
+                      );
+                    }
+                  }
+                  // If nested creation failed or path >2 levels, fall back to a flat folder.
+                  if (!createdContainer?.isConnected) {
+                    const flatLabel = pathParts?.pop().trim() || topic;
+                    createdContainer = findTopLevelFolderByLabel(
+                      flatLabel,
+                      currentWorkspaceId
                     );
+                    if (createdContainer?.isConnected) {
+                      const tabsForFolder = tabsForThisTopic.filter(
+                        (t) => t?.isConnected
+                      );
+                      tabsForFolder.forEach((t) => {
+                        try {
+                          if (!t.pinned) gBrowser.pinTab(t);
+                        } catch (pinErr) {
+                          console.warn("[TidyTabs] pinTab failed:", pinErr);
+                        }
+                      });
+                      if (tabsForFolder.length) {
+                        createdContainer.addTabs(tabsForFolder);
+                      }
+                      createdContainer.collapsed = false;
+                      upsertContainerByLabel(
+                        existingContainersByLabel,
+                        flatLabel,
+                        "folder",
+                        createdContainer
+                      );
+                    } else {
+                      createdContainer = gZenFolders.createFolder(
+                        tabsForThisTopic.filter((t) => t?.isConnected),
+                        {
+                          renameFolder: false,
+                          label: flatLabel,
+                          workspaceId: currentWorkspaceId,
+                        }
+                      );
+                      if (createdContainer?.isConnected) {
+                        createdContainer.collapsed = false;
+                        upsertContainerByLabel(
+                          existingContainersByLabel,
+                          flatLabel,
+                          "folder",
+                          createdContainer
+                        );
+                      }
+                    }
                   }
                 } else {
                   createdContainer = findTopLevelFolderByLabel(
@@ -3052,9 +3091,13 @@
                   }
                 }
               } else {
+                // Tab groups cannot nest — flatten to a single label.
+                const groupLabel = topic.includes(NESTED_GROUP_DELIMITER)
+                  ? topic.split(NESTED_GROUP_DELIMITER).pop().trim()
+                  : topic;
                 const firstValidTabForGroup = tabsForThisTopic[0];
                 const groupOptions = {
-                  label: topic,
+                  label: groupLabel,
                   insertBefore: firstValidTabForGroup,
                 };
                 const newGroup = gBrowser.addTabGroup(
