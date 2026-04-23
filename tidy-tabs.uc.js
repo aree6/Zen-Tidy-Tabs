@@ -341,70 +341,180 @@
     return name || "Group";
   };
 
-  // Call OpenRouter's /chat/completions to name a cluster. Returns the raw
-  // string on success, or null on any failure (missing pref, unknown slug,
-  // HTTP error, timeout, malformed JSON) — caller is responsible for falling
-  // back to the local Mozilla/smart-tab-topic engine.
+  // True iff the user has both picked a non-"local" OpenRouter model AND
+  // supplied an API key. Cheap guard so call sites can short-circuit before
+  // building prompts or engine state.
+  const isOpenRouterConfigured = () => {
+    const slug = (CONFIG.AI_GROUP_NAMER || "local").trim();
+    if (!slug || slug === "local") return false;
+    if (!OPENROUTER_MODELS[slug]) return false;
+    return !!(CONFIG.OPENROUTER_API_KEY || "").trim();
+  };
+
+  // Defensively extract a JSON object from a possibly-decorated model
+  // response. Free models occasionally wrap output in markdown fences or
+  // tack on trailing commentary — we strip both, then grab the outermost
+  // {...} slice and try JSON.parse. Returns null on any failure rather
+  // than throwing so callers can fall through to fuzzy grouping.
+  const parseGroupingJson = (text) => {
+    if (!text || typeof text !== "string") return null;
+    let cleaned = text.trim();
+    const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenceMatch) cleaned = fenceMatch[1].trim();
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : null;
+    } catch (e) {
+      console.warn("[TabSort][OpenRouter] JSON parse failed:", e);
+      return null;
+    }
+  };
+
+  // One-shot full-pipeline grouping via OpenRouter. Instead of N embedding
+  // calls + N naming calls, we send the entire loose-tab list once and let
+  // the model decide both (a) which tabs cluster together and (b) what to
+  // name each cluster. Returns a `{ topicName: [tab, tab, ...] }` map on
+  // success (same shape as `fuzzyGroupByTokens`) or null on any failure so
+  // the caller can degrade to fuzzy grouping.
   //
   // Chrome-privileged fetch: this script runs as a user chrome script, so
   // it can reach arbitrary origins without CSP restrictions. We still set a
-  // 10s timeout via AbortController so a slow free-tier model can't stall
-  // the sort pipeline.
-  const nameGroupWithOpenRouter = async (titles, keywords) => {
-    const modelSlug = (CONFIG.AI_GROUP_NAMER || "local").trim();
-    if (!modelSlug || modelSlug === "local") return null;
+  // 20s timeout via AbortController — full-grouping responses are larger
+  // than single-label responses, so the ceiling is higher than naming-only.
+  //
+  // Privacy: we send title + hostname only. Full URLs (path + query) are
+  // deliberately excluded to avoid leaking viewing history.
+  const askOpenRouterForGroups = async (tabs, existingGroupNames) => {
+    if (!isOpenRouterConfigured()) return null;
 
+    const validTabs = (tabs || []).filter((t) => t?.isConnected);
+    if (validTabs.length < 2) return null; // nothing meaningful to cluster
+
+    const modelSlug = (CONFIG.AI_GROUP_NAMER || "").trim();
     const modelId = OPENROUTER_MODELS[modelSlug];
-    if (!modelId) return null;
-
     const apiKey = (CONFIG.OPENROUTER_API_KEY || "").trim();
-    if (!apiKey) return null;
+
+    // Numbered list keeps the contract tight: "give me back these numbers".
+    // Numbers are way more reliable than asking the model to echo titles
+    // (which it will paraphrase, truncate, or case-change).
+    const lines = validTabs.map((tab, i) => {
+      const title = (getTabTitle(tab) || "Untitled").slice(0, 140);
+      const host = getTabHost(tab) || "—";
+      return `${i + 1}. [${host}] ${title}`;
+    });
+
+    const existingHint =
+      existingGroupNames && existingGroupNames.size > 0
+        ? `\n\nExisting groups in this workspace (REUSE these names when tabs fit): ${[
+            ...existingGroupNames,
+          ].join(", ")}`
+        : "";
+
+    const systemPrompt =
+      "You organize browser tabs into topic groups. You will receive a numbered list of tabs " +
+      "formatted as: `N. [hostname] title`. Return ONLY a single JSON object where each key is " +
+      "a concise topic name (1-3 words, Title Case) and each value is an array of tab numbers " +
+      "belonging to that group. Requirements: " +
+      "(1) Every tab number appears in AT MOST one group. " +
+      "(2) Skip tabs that don't fit a clear group (omit them rather than inventing vague buckets). " +
+      "(3) Reuse provided existing group names when appropriate. " +
+      "(4) No markdown fences, no prose, no commentary — just the JSON object.";
+
+    const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
+    const timer = setTimeout(() => controller.abort(), 20000);
 
     try {
       const body = {
         model: modelId,
-        // Short, deterministic output: we want a single clean label.
-        max_tokens: 16,
+        // Output is bounded roughly by (groups * ~30 chars) + tab numbers;
+        // 1024 is comfortable headroom for ~100 tabs across ~20 groups.
+        max_tokens: 1024,
         temperature: 0.2,
         messages: [
-          {
-            role: "system",
-            content:
-              "You name browser tab groups. Given keywords and tab titles, respond with ONE concise category name of 1-3 words in Title Case. No punctuation, no quotes, no explanation — just the name.",
-          },
-          {
-            role: "user",
-            content: `Keywords: ${keywords.join(", ")}\n\nTitles:\n${titles.join("\n")}\n\nCategory name:`,
-          },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
         ],
       };
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-          // Identifies this mod in OpenRouter's rankings (optional per docs).
-          "HTTP-Referer": "https://github.com/aree6/Zen-Tidy-Tabs",
-          "X-OpenRouter-Title": "Zen Tidy Tabs",
-        },
-        body: JSON.stringify(body),
-      });
+      const response = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            // Identifies this mod in OpenRouter's rankings (optional).
+            "HTTP-Referer": "https://github.com/aree6/Zen-Tidy-Tabs",
+            "X-OpenRouter-Title": "Zen Tidy Tabs",
+          },
+          body: JSON.stringify(body),
+        }
+      );
 
       if (!response.ok) {
-        console.warn(`[TabSort][OpenRouter] HTTP ${response.status} from ${modelId}; falling back to local.`);
+        console.warn(
+          `[TabSort][OpenRouter] HTTP ${response.status} from ${modelId}; falling back to fuzzy.`
+        );
         return null;
       }
 
       const json = await response.json();
       const content = json?.choices?.[0]?.message?.content;
-      return typeof content === "string" && content.trim() ? content : null;
+      const parsed = parseGroupingJson(content);
+      if (!parsed) return null;
+
+      // Map 1-based indices back to real tab objects. We also dedupe in
+      // case the model accidentally lists a tab under two topics; first
+      // assignment wins so output is stable.
+      const assignedTabs = new Set();
+      const fallbackTitles = validTabs.map((t) => getTabTitle(t));
+      const result = {};
+
+      for (const [rawName, indices] of Object.entries(parsed)) {
+        if (!Array.isArray(indices)) continue;
+        const cleanName = sanitizeGroupName(rawName, fallbackTitles);
+        if (!cleanName) continue;
+
+        const tabsForGroup = [];
+        for (const raw of indices) {
+          const n = Number.parseInt(raw, 10);
+          if (!Number.isInteger(n) || n < 1 || n > validTabs.length) continue;
+          const tab = validTabs[n - 1];
+          if (!tab?.isConnected || assignedTabs.has(tab)) continue;
+          assignedTabs.add(tab);
+          tabsForGroup.push(tab);
+        }
+        if (tabsForGroup.length === 0) continue;
+
+        // If the model reused a name with different casing vs. an existing
+        // group, prefer the existing casing so we merge cleanly.
+        const finalName = [...(existingGroupNames || [])].find(
+          (existing) => existing.toLowerCase() === cleanName.toLowerCase()
+        ) || cleanName;
+
+        result[finalName] = (result[finalName] || []).concat(tabsForGroup);
+      }
+
+      const groupCount = Object.keys(result).length;
+      console.log(
+        `[TabSort][OpenRouter] ${modelId} grouped ${assignedTabs.size}/${validTabs.length} tabs into ${groupCount} groups.`
+      );
+      return groupCount > 0 ? result : null;
     } catch (e) {
-      console.warn(`[TabSort][OpenRouter] Request failed for ${modelId}; falling back to local.`, e);
+      console.warn(
+        `[TabSort][OpenRouter] Request failed for ${modelId}; falling back to fuzzy.`,
+        e
+      );
       return null;
     } finally {
       clearTimeout(timer);
@@ -1439,19 +1549,13 @@
             return keywords;
           }
 
-          // Group naming function. Routes to OpenRouter when the user has
-          // selected a non-"local" model AND provided an API key; otherwise
-          // falls through to Firefox's built-in Mozilla/smart-tab-topic.
-          // Any OpenRouter failure (network, rate limit, bad key, ...)
-          // silently degrades to the local engine so sorting never breaks.
+          // Group naming via Firefox's on-device Mozilla/smart-tab-topic.
+          // This path only runs when OpenRouter is NOT configured — the
+          // OpenRouter engine does its own naming as part of a single
+          // full-grouping request (see `askOpenRouterForGroups`), so we
+          // don't need a separate naming hop here.
           async function nameGroupWithSmartTabTopic(titles) {
             const keywords = extractKeywords(titles);
-
-            // 1. OpenRouter branch — only reached when configured.
-            const remote = await nameGroupWithOpenRouter(titles, keywords);
-            if (remote) return sanitizeGroupName(remote, titles);
-
-            // 2. Local branch — default path, identical to the original logic.
             const input = `Topic from keywords: ${keywords.join(
               ", "
             )}. titles:\n${titles.join("\n")}`;
@@ -2178,13 +2282,58 @@
       }
 
       // --- Build Final Groups ---
+      // Engine priority (first match wins):
+      //   1. OpenRouter — full one-shot grouping + naming via remote LLM
+      //      when the user has configured a model + API key. Replaces
+      //      local embeddings entirely because a capable LLM clusters
+      //      better (cross-tab context) AND it's actually cheaper:
+      //      1 request per sort vs N embedding calls + M naming calls.
+      //   2. Local Firefox ML (`browser.ml.enabled` = true) — on-device
+      //      embeddings for clustering + Mozilla/smart-tab-topic for names.
+      //   3. Fuzzy — deterministic token + hostname Jaccard clustering,
+      //      no model required. Also the fallback when either remote
+      //      path errors out (network, rate limit, bad JSON, etc).
       let finalGroups = {};
       let aiTabTopics = [];
+      // Whether the chosen engine actually returned groups (pre-rescue).
+      // Used by the failure-animation check below so we don't shake the
+      // separator when the model worked but every group happened to be a
+      // singleton that got absorbed by rescue passes.
+      let engineProducedGroups = false;
       const aiEnabled = isAIEnabled();
+      const openRouterEnabled = isOpenRouterConfigured();
 
-      if (aiEnabled) {
+      if (openRouterEnabled) {
         console.log(
-          "[TabSort] Using AI grouping for",
+          "[TabSort] Using OpenRouter full-grouping for",
+          initialTabsToSort.length,
+          "tabs"
+        );
+        const remoteGroups = await askOpenRouterForGroups(
+          initialTabsToSort,
+          allExistingGroupNames
+        );
+        if (remoteGroups && Object.keys(remoteGroups).length > 0) {
+          finalGroups = consolidateSimilarGroupNames(
+            remoteGroups,
+            allExistingGroupNames
+          );
+          engineProducedGroups = true;
+        } else {
+          // Any OpenRouter failure (null response, empty groups) silently
+          // degrades to fuzzy so the user still gets a sort. Fuzzy is the
+          // fallback (not local AI) because it has no external dependency
+          // and is deterministic — if OpenRouter broke mid-sort, we want
+          // something guaranteed to produce *some* grouping.
+          console.log("[TabSort] OpenRouter returned nothing; falling back to fuzzy.");
+          finalGroups = fuzzyGroupByTokens(
+            initialTabsToSort,
+            allExistingGroupNames
+          );
+        }
+      } else if (aiEnabled) {
+        console.log(
+          "[TabSort] Using local AI grouping for",
           initialTabsToSort.length,
           "tabs"
         );
@@ -2201,6 +2350,7 @@
         });
 
         finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
+        engineProducedGroups = aiTabTopics.length > 0;
       } else {
         console.log(
           "[TabSort] AI disabled — using fuzzy grouping for",
@@ -2208,6 +2358,7 @@
           "tabs"
         );
         finalGroups = fuzzyGroupByTokens(initialTabsToSort, allExistingGroupNames);
+        engineProducedGroups = Object.keys(finalGroups).length > 0;
       }
 
       // --- Rescue ungrouped tabs ---
@@ -2226,10 +2377,16 @@
       );
 
       // --- Failure check ---
+      // We animate the spiky "failure" only when there's genuinely nothing
+      // to show for the sort: no multi-tab groups emerged AND the chosen
+      // engine never produced anything pre-rescue AND there were enough
+      // tabs that grouping was even expected. `engineProducedGroups`
+      // replaces the old aiEnabled/aiTabTopics special-case so OpenRouter
+      // and fuzzy paths are treated consistently.
       const multiTabGroups = Object.values(finalGroups).filter((tabs) => tabs.length > 1);
       const sortingFailed =
         multiTabGroups.length === 0 &&
-        (aiEnabled ? aiTabTopics.length === 0 : true) &&
+        !engineProducedGroups &&
         initialTabsToSort.length > 1;
 
       console.log("[TabSort] Debug - Initial tabs:", initialTabsToSort.length);
