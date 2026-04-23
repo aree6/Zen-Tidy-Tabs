@@ -420,7 +420,7 @@
     const systemPrompt =
       "You organize browser tabs into topic groups. You will receive a numbered list of tabs " +
       "formatted as: `N. [hostname] title`. Return ONLY a single JSON object where each key is " +
-      "a concise topic name (1-3 words, Title Case) and each value is an array of tab numbers " +
+      "a concise topic name (1-3 words, Title Case, Human readable names UX matters.) and each value is an array of tab numbers " +
       "belonging to that group. Requirements: " +
       "(1) Every tab number appears in AT MOST one group. " +
       "(2) Skip tabs that don't fit a clear group (omit them rather than inventing vague buckets). " +
@@ -3116,6 +3116,7 @@
       "TabGrouped",
       "TabUngrouped",
       "TabAttrModified",
+      "TabMove",
     ];
 
     events.forEach((eventName) => {

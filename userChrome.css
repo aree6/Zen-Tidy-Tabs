@@ -177,9 +177,9 @@ zen-folder::after,
 tab-group:not(zen-folder)::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 2px 6px;
   border-radius: var(--zen-border-radius, 10px);
-  background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 7%, transparent);
+  background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 2%, transparent);
   pointer-events: none;
   z-index: -1;
   transition: background 0.3s ease;
