@@ -51,14 +51,21 @@
   },
   {
     "type": "string",
-    "label": "OpenRouter API Key — paste your key from openrouter.ai/keys to enable remote group naming. Leave empty to stay on the local Firefox model.",
+    "label": "Behavior: Protected hosts (never auto-group) — comma or newline separated hostnames; supports subdomain matching (e.g. mail.google.com)",
+    "property": "zen.tidytabs.behavior.protected-hosts",
+    "defaultValue": "",
+    "placeholder": "mail.google.com, calendar.google.com"
+  },
+  {
+    "type": "string",
+    "label": "OpenRouter API Key — paste your key from openrouter.ai/keys to enable one-shot remote tab grouping + naming. Leave empty to stay fully local.",
     "property": "zen.tidytabs.openrouter.api-key",
     "defaultValue": "",
     "placeholder": "sk-or-v1-..."
   },
   {
     "type": "dropdown",
-    "label": "AI Group Namer — which model labels your clusters. Local is the default Firefox on-device model; the rest call OpenRouter (requires API key above). Embeddings/clustering stay local either way.",
+    "label": "Grouping Engine — Local keeps grouping + naming on-device; OpenRouter options perform one-shot remote grouping + naming (requires API key above).",
     "property": "zen.tidytabs.ai.group-namer",
     "defaultValue": "local",
     "placeholder": "Local (Firefox ML)",

@@ -48,14 +48,94 @@
     // into a single "Miscellaneous" group so nothing is left stranded.
     // Turn off if you prefer leftovers to stay loose in the sidebar.
     GROUP_LEFTOVERS_AS_MISC: true,
-    // Group-naming backend. "local" = Firefox's built-in Mozilla/smart-tab-topic
-    // engine (default, offline). Any other value must be a key in
-    // OPENROUTER_MODELS below and will route naming through OpenRouter using
-    // the user's API key. Embeddings stay local either way.
+    // Grouping backend. "local" keeps everything on-device (Firefox ML
+    // embeddings + local topic naming). Any other value must be a key in
+    // OPENROUTER_MODELS below and routes the ENTIRE grouping decision
+    // through OpenRouter using the user's API key.
     AI_GROUP_NAMER: "local",
     // OpenRouter API key. Only read when AI_GROUP_NAMER != "local".
     // Stored verbatim in the pref store; empty string disables the path.
     OPENROUTER_API_KEY: "",
+    // Optional comma/newline-separated host list that should stay loose
+    // (never auto-grouped), e.g. "mail.google.com, calendar.google.com".
+    PROTECTED_HOSTS: "",
+  };
+
+  const hasMeaningfulTitleSignal = (title) => {
+    const normalized = (title || "").toString().trim().toLowerCase();
+    if (!normalized || LOW_SIGNAL_TITLES.has(normalized)) return false;
+    if (normalized.length < 5) return false;
+    if (normalized.startsWith("http:") || normalized.startsWith("https:")) {
+      return false;
+    }
+    // Host-only placeholders like "github.com" or "mail.google.com"
+    // usually came from URL fallback, so they carry weak topical signal.
+    if (/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(normalized)) {
+      return false;
+    }
+    return true;
+  };
+
+  const getTitleSignalStats = (tabs) => {
+    const validTabs = (tabs || []).filter((tab) => tab?.isConnected);
+    if (!validTabs.length) {
+      return { total: 0, meaningful: 0, ratio: 0 };
+    }
+    const meaningful = validTabs.reduce((count, tab) => {
+      return count + (hasMeaningfulTitleSignal(getTabTitle(tab)) ? 1 : 0);
+    }, 0);
+    return {
+      total: validTabs.length,
+      meaningful,
+      ratio: meaningful / validTabs.length,
+    };
+  };
+
+  const chooseGroupingEngine = (tabs) => {
+    const validTabs = (tabs || []).filter((tab) => tab?.isConnected);
+    if (validTabs.length < 2) {
+      return {
+        engine: "fuzzy",
+        reason: "Not enough tabs for model clustering",
+      };
+    }
+
+    if (validTabs.length > MAX_TABS_FOR_MODEL_GROUPING) {
+      return {
+        engine: "fuzzy",
+        reason: `Large batch (${validTabs.length} tabs)`,
+      };
+    }
+
+    const titleSignal = getTitleSignalStats(validTabs);
+    const lowSignal =
+      titleSignal.ratio < MIN_TITLE_SIGNAL_RATIO_FOR_MODEL_GROUPING;
+
+    if (isOpenRouterConfigured() && !lowSignal) {
+      return {
+        engine: "openrouter",
+        reason: `OpenRouter configured + strong title signal (${titleSignal.meaningful}/${titleSignal.total})`,
+      };
+    }
+
+    if (isAIEnabled() && !lowSignal) {
+      return {
+        engine: "local-ai",
+        reason: `Local AI available + strong title signal (${titleSignal.meaningful}/${titleSignal.total})`,
+      };
+    }
+
+    if (isOpenRouterConfigured() || isAIEnabled()) {
+      return {
+        engine: "fuzzy",
+        reason: `Low title signal (${titleSignal.meaningful}/${titleSignal.total})`,
+      };
+    }
+
+    return {
+      engine: "fuzzy",
+      reason: "AI disabled",
+    };
   };
 
   // Short dropdown slug -> OpenRouter model ID. Slugs are used as the pref
@@ -86,6 +166,7 @@
     GROUP_LEFTOVERS_AS_MISC: ["bool", "group-leftovers-as-misc"],
     AI_GROUP_NAMER: ["string", "ai.group-namer"],
     OPENROUTER_API_KEY: ["string", "openrouter.api-key"],
+    PROTECTED_HOSTS: ["string", "behavior.protected-hosts"],
   };
 
   const services =
@@ -191,16 +272,96 @@
   const CONFIG = loadRuntimeConfig();
   deriveGroupingThresholds(CONFIG);
 
+  const normalizeHost = (host) => {
+    if (!host || typeof host !== "string") return "";
+    return host
+      .trim()
+      .toLowerCase()
+      .replace(/^\*\./, "")
+      .replace(/^\./, "")
+      .replace(/^www\./, "");
+  };
+
+  const parseHostListPref = (raw) => {
+    if (!raw || typeof raw !== "string") return new Set();
+    return new Set(
+      raw
+        .split(/[\n,]/)
+        .map((entry) => normalizeHost(entry))
+        .filter(Boolean)
+    );
+  };
+
+  const PROTECTED_HOSTS = parseHostListPref(CONFIG.PROTECTED_HOSTS);
+  const PROTECTED_HOST_PATTERNS = [...PROTECTED_HOSTS];
+  const isProtectedHost = (host) => {
+    const normalizedHost = normalizeHost(host);
+    if (!normalizedHost || PROTECTED_HOST_PATTERNS.length === 0) return false;
+    return PROTECTED_HOST_PATTERNS.some(
+      (blocked) => normalizedHost === blocked || normalizedHost.endsWith(`.${blocked}`)
+    );
+  };
+  const shouldProtectTabFromGrouping = (tab) => isProtectedHost(getTabHost(tab));
+
+  // When there are lots of tabs or mostly low-signal titles ("Untitled",
+  // host-only placeholders, etc.), deterministic fuzzy grouping is usually
+  // more reliable/fast than model-based grouping.
+  const MAX_TABS_FOR_MODEL_GROUPING = 120;
+  const MIN_TITLE_SIGNAL_RATIO_FOR_MODEL_GROUPING = 0.34;
+  const LOW_SIGNAL_TITLES = new Set([
+    "new tab",
+    "about:blank",
+    "loading...",
+    "untitled page",
+    "invalid tab",
+    "error processing tab",
+  ]);
+
   // --- Globals & State ---
   let isSorting = false;
   let isPlayingFailureAnimation = false;
   let sortAnimationId = null;
   let eventListenersAdded = false;
+  let sidebarMenuListenersAdded = false;
+  let sidebarPopupShowingHandler = null;
+  let sidebarContextMenuHandler = null;
+
+  let originalCloseAllUnpinnedTabs = null;
+  let clearButtonPatched = false;
+
+  let gZenWorkspaceHooksApplied = false;
+  let originalWorkspaceOnTabBrowserInserted = null;
+  let originalWorkspaceUpdateTabsContainers = null;
+
+  let embeddingEnginePromise = null;
+  let namingEnginePromise = null;
+  const EMBEDDING_CACHE_LIMIT = 400;
+  const EMBEDDING_CACHE = new Map();
+
+  let faviconRefreshRaf = null;
+  let faviconRefreshInFlight = false;
+  let faviconRefreshPending = false;
+
+  const GROUP_NODE_SELECTOR = ":is(tab-group, zen-folder)";
+
+  const TAB_CONTAINER_EVENTS = [
+    "TabOpen",
+    "TabClose",
+    "TabSelect",
+    "TabPinned",
+    "TabUnpinned",
+    "TabGroupAdd",
+    "TabGroupRemove",
+    "TabGrouped",
+    "TabUngrouped",
+    "TabAttrModified",
+    "TabMove",
+  ];
+  let tabContainerEventHandler = null;
 
   // DOM Cache for performance
   const domCache = {
     separators: null,
-    commandSet: null,
 
     getSeparators() {
       if (!this.separators || !this.separators.length) {
@@ -211,16 +372,8 @@
       return this.separators;
     },
 
-    getCommandSet() {
-      if (!this.commandSet) {
-        this.commandSet = document.querySelector("commandset#zenCommandSet");
-      }
-      return this.commandSet;
-    },
-
     invalidate() {
       this.separators = null;
-      this.commandSet = null;
     },
   };
 
@@ -526,7 +679,6 @@
       // case the model accidentally lists a tab under two topics; first
       // assignment wins so output is stable.
       const assignedTabs = new Set();
-      const fallbackTitles = validTabs.map((t) => getTabTitle(t));
       const result = {};
 
       for (const [rawName, indices] of Object.entries(flatGroups)) {
@@ -600,33 +752,54 @@
     return matrix[b.length][a.length];
   };
 
-  const findGroupElement = (topicName, workspaceId) => {
-    if (!topicName || typeof topicName !== "string" || !workspaceId)
-      return null;
-
-    const sanitizedTopicName = topicName.trim();
-    if (!sanitizedTopicName) return null;
-
-    const safeSelectorTopicName = sanitizedTopicName
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, '\\"');
-
-    try {
-      return document.querySelector(
-        `tab-group[label="${safeSelectorTopicName}"][zen-workspace-id="${workspaceId}"]`
-      );
-    } catch (e) {
-      console.error(
-        `Error finding group selector for "${sanitizedTopicName}":`,
-        e
-      );
-      return null;
+  const escapeForAttrSelector = (value) => {
+    const str = (value ?? "").toString();
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(str);
     }
+    return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   };
+
+  const isFolderGroupElement = (groupEl) => {
+    if (!groupEl) return false;
+    const tag = groupEl.tagName?.toLowerCase();
+    return !!groupEl.isZenFolder || tag === "zen-folder";
+  };
+
+  const getTabContainerGroup = (tab) =>
+    tab?.group ?? tab?.closest?.(GROUP_NODE_SELECTOR) ?? null;
+
+  const isGroupInWorkspace = (groupEl, workspaceId) => {
+    if (!groupEl?.isConnected || !workspaceId) return false;
+    if (groupEl.getAttribute("zen-workspace-id") === workspaceId) return true;
+    return Array.from(groupEl.querySelectorAll("tab")).some(
+      (tab) => tab.getAttribute("zen-workspace-id") === workspaceId
+    );
+  };
+
+  const isTabInWorkspaceGroup = (tab, workspaceId) =>
+    isGroupInWorkspace(getTabContainerGroup(tab), workspaceId);
+
+  const getLabelKey = (label) => (label || "").trim().toLowerCase();
+
+  const upsertContainerByLabel = (containerMap, label, kind, element) => {
+    if (!(containerMap instanceof Map) || !element?.isConnected) return;
+    if (kind !== "folder" && kind !== "group") return;
+    const key = getLabelKey(label);
+    if (!key) return;
+    const entry = containerMap.get(key) || { folder: null, group: null };
+    entry[kind] = element;
+    containerMap.set(key, entry);
+  };
+
+  const getWorkspaceGroupElements = (workspaceId) =>
+    Array.from(document.querySelectorAll(GROUP_NODE_SELECTOR)).filter((groupEl) =>
+      isGroupInWorkspace(groupEl, workspaceId)
+    );
 
   const findTopLevelFolderByLabel = (label, workspaceId) => {
     if (!label || !workspaceId) return null;
-    const safeLabel = label.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const safeLabel = escapeForAttrSelector(label);
     const selector = `zen-folder[label="${safeLabel}"][zen-workspace-id="${workspaceId}"]`;
     return Array.from(document.querySelectorAll(selector)).find(
       (folder) => folder?.isConnected && !folder?.group?.isZenFolder
@@ -635,7 +808,7 @@
 
   const findSubFolderByLabel = (parentFolder, label) => {
     if (!parentFolder?.isConnected || !label) return null;
-    const safeLabel = label.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const safeLabel = escapeForAttrSelector(label);
     const container = parentFolder.querySelector(":scope > .tab-group-container");
     if (!container) return null;
     return Array.from(container.querySelectorAll(`zen-folder[label="${safeLabel}"]`)).find(
@@ -690,7 +863,11 @@
 
     if (!childFolder?.isConnected) return null;
 
-    const validTabs = tabs.filter((t) => t?.isConnected);
+    // Avoid re-adding tabs already attached to a workspace group/folder.
+    // This prevents duplicate addTabs calls when nested folders are created.
+    const validTabs = tabs.filter(
+      (t) => t?.isConnected && !isTabInWorkspaceGroup(t, workspaceId)
+    );
     if (validTabs.length) {
       validTabs.forEach((t) => {
         try { if (!t.pinned) gBrowser.pinTab(t); } catch {}
@@ -776,6 +953,19 @@
   // --- Favicon color sampling for group/folder background tint ---------
 
   const FAVICON_COLOR_CACHE = new Map();
+  const FAVICON_COLOR_CACHE_LIMIT = 300;
+
+  const cacheFaviconColor = (iconUrl, color) => {
+    if (!iconUrl) return;
+    if (FAVICON_COLOR_CACHE.has(iconUrl)) {
+      FAVICON_COLOR_CACHE.delete(iconUrl);
+    }
+    FAVICON_COLOR_CACHE.set(iconUrl, color);
+    if (FAVICON_COLOR_CACHE.size > FAVICON_COLOR_CACHE_LIMIT) {
+      const oldestKey = FAVICON_COLOR_CACHE.keys().next().value;
+      FAVICON_COLOR_CACHE.delete(oldestKey);
+    }
+  };
 
   const sampleFaviconColor = (iconUrl) => {
     if (FAVICON_COLOR_CACHE.has(iconUrl)) {
@@ -800,20 +990,20 @@
             count++;
           }
           if (count === 0) {
-            FAVICON_COLOR_CACHE.set(iconUrl, null);
+            cacheFaviconColor(iconUrl, null);
             resolve(null);
             return;
           }
           const color = `rgb(${Math.round(r / count)}, ${Math.round(g / count)}, ${Math.round(b / count)})`;
-          FAVICON_COLOR_CACHE.set(iconUrl, color);
+          cacheFaviconColor(iconUrl, color);
           resolve(color);
         } catch (e) {
-          FAVICON_COLOR_CACHE.set(iconUrl, null);
+          cacheFaviconColor(iconUrl, null);
           resolve(null);
         }
       };
       img.onerror = () => {
-        FAVICON_COLOR_CACHE.set(iconUrl, null);
+        cacheFaviconColor(iconUrl, null);
         resolve(null);
       };
       img.src = iconUrl;
@@ -822,7 +1012,7 @@
 
   const refreshGroupFaviconColors = async () => {
     if (!window.gBrowser) return;
-    const groups = document.querySelectorAll("zen-folder, tab-group:not(zen-folder)");
+    const groups = document.querySelectorAll(GROUP_NODE_SELECTOR);
     for (const group of groups) {
       const firstTab = group.querySelector(".tabbrowser-tab");
       if (!firstTab) {
@@ -850,6 +1040,25 @@
         group.style.removeProperty("--tidy-tabs-favicon-color");
       }
     }
+  };
+
+  const scheduleFaviconRefresh = () => {
+    faviconRefreshPending = true;
+    if (faviconRefreshRaf !== null) return;
+    faviconRefreshRaf = requestAnimationFrame(async () => {
+      faviconRefreshRaf = null;
+      if (faviconRefreshInFlight) return;
+      faviconRefreshInFlight = true;
+      try {
+        faviconRefreshPending = false;
+        await refreshGroupFaviconColors();
+      } finally {
+        faviconRefreshInFlight = false;
+        if (faviconRefreshPending) {
+          scheduleFaviconRefresh();
+        }
+      }
+    });
   };
 
   class TidyTabsTreeConnectors {
@@ -1456,24 +1665,6 @@
     return groups;
   }
 
-  // Batch DOM operations for better performance
-  const batchDOMUpdates = (operations) => {
-    if (!Array.isArray(operations) || operations.length === 0) return;
-
-    // Use document fragment for batching when possible
-    const fragment = document.createDocumentFragment();
-
-    try {
-      operations.forEach((operation) => {
-        if (typeof operation === "function") {
-          operation(fragment);
-        }
-      });
-    } catch (error) {
-      console.error("Error in batch DOM operations:", error);
-    }
-  };
-
   // Process embeddings in batches for better performance
   const processTabsInBatches = async (
     tabs,
@@ -1492,19 +1683,71 @@
     return results;
   };
 
+  const cacheEmbedding = (key, embedding) => {
+    if (!key) return;
+    if (EMBEDDING_CACHE.has(key)) {
+      EMBEDDING_CACHE.delete(key);
+    }
+    EMBEDDING_CACHE.set(key, embedding);
+    if (EMBEDDING_CACHE.size > EMBEDDING_CACHE_LIMIT) {
+      const oldestKey = EMBEDDING_CACHE.keys().next().value;
+      EMBEDDING_CACHE.delete(oldestKey);
+    }
+  };
+
+  const getEmbeddingEngine = async () => {
+    if (!embeddingEnginePromise) {
+      embeddingEnginePromise = (async () => {
+        const { createEngine } = ChromeUtils.importESModule(
+          "chrome://global/content/ml/EngineProcess.sys.mjs"
+        );
+        return createEngine({
+          taskName: "feature-extraction",
+          modelId: "Mozilla/smart-tab-embedding",
+          modelHub: "huggingface",
+          engineId: "embedding-engine",
+        });
+      })().catch((error) => {
+        embeddingEnginePromise = null;
+        throw error;
+      });
+    }
+    return embeddingEnginePromise;
+  };
+
+  const getGroupNamingEngine = async () => {
+    if (!namingEnginePromise) {
+      namingEnginePromise = (async () => {
+        const { createEngine } = ChromeUtils.importESModule(
+          "chrome://global/content/ml/EngineProcess.sys.mjs"
+        );
+        return createEngine({
+          taskName: "text2text-generation",
+          modelId: "Mozilla/smart-tab-topic",
+          modelHub: "huggingface",
+          engineId: "group-namer",
+        });
+      })().catch((error) => {
+        namingEnginePromise = null;
+        throw error;
+      });
+    }
+    return namingEnginePromise;
+  };
+
+  const getEmbeddingCacheKey = (title) =>
+    typeof title === "string" ? title.trim().toLowerCase().slice(0, 512) : "";
+
   const generateEmbedding = async (title) => {
     if (!title || typeof title !== "string") return null;
 
+    const cacheKey = getEmbeddingCacheKey(title);
+    if (cacheKey && EMBEDDING_CACHE.has(cacheKey)) {
+      return EMBEDDING_CACHE.get(cacheKey);
+    }
+
     try {
-      const { createEngine } = ChromeUtils.importESModule(
-        "chrome://global/content/ml/EngineProcess.sys.mjs"
-      );
-      const engine = await createEngine({
-        taskName: "feature-extraction",
-        modelId: "Mozilla/smart-tab-embedding",
-        modelHub: "huggingface",
-        engineId: "embedding-engine",
-      });
+      const engine = await getEmbeddingEngine();
 
       const result = await engine.run({ args: [title] });
       let embedding;
@@ -1527,11 +1770,15 @@
       ) {
         // Normalize the embedding
         const norm = Math.sqrt(pooled.reduce((sum, v) => sum + v * v, 0));
-        return norm === 0 ? pooled : pooled.map((v) => v / norm);
+        const normalized = norm === 0 ? pooled : pooled.map((v) => v / norm);
+        cacheEmbedding(cacheKey, normalized);
+        return normalized;
       }
+      cacheEmbedding(cacheKey, null);
       return null;
     } catch (e) {
       console.error("[TabSort][AI] Error generating embedding:", e);
+      cacheEmbedding(cacheKey, null);
       return null;
     }
   };
@@ -1546,11 +1793,91 @@
     const result = [];
     const ungroupedTabs = [];
 
+    const extractKeywords = (titles) => {
+      const allWords = titles
+        .join(" ")
+        .toLowerCase()
+        .replace(/[^\w\s]/g, " ")
+        .split(/\s+/)
+        .filter((word) => word.length > 2);
+
+      const wordCount = {};
+      allWords.forEach((word) => {
+        wordCount[word] = (wordCount[word] || 0) + 1;
+      });
+
+      const stopWords = new Set([
+        "the",
+        "and",
+        "for",
+        "are",
+        "but",
+        "not",
+        "you",
+        "all",
+        "can",
+        "had",
+        "her",
+        "was",
+        "one",
+        "our",
+        "out",
+        "day",
+        "get",
+        "has",
+        "him",
+        "his",
+        "how",
+        "man",
+        "new",
+        "now",
+        "old",
+        "see",
+        "two",
+        "way",
+        "who",
+        "boy",
+        "did",
+        "its",
+        "let",
+        "put",
+        "say",
+        "she",
+        "too",
+        "use",
+      ]);
+
+      return Object.entries(wordCount)
+        .filter(([word]) => !stopWords.has(word))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([word]) => word);
+    };
+
+    const nameGroupWithSmartTabTopic = async (titles) => {
+      const keywords = extractKeywords(titles);
+      const input = `Topic from keywords: ${keywords.join(
+        ", "
+      )}. titles:\n${titles.join("\n")}`;
+
+      try {
+        const engine = await getGroupNamingEngine();
+        const aiResult = await engine.run({
+          args: [input],
+          options: { max_new_tokens: 8, temperature: 0.7 },
+        });
+
+        return sanitizeGroupName(aiResult?.[0]?.generated_text || "Group", titles);
+      } catch (e) {
+        console.error("[TabSort][AI] Error naming group:", e);
+        return "Group";
+      }
+    };
+
     // Get existing groups in current workspace
     const existingWorkspaceGroups = new Map();
     if (currentWorkspaceId) {
-      const groupSelector = `:is(tab-group, zen-folder):has(tab[zen-workspace-id="${currentWorkspaceId}"])`;
-      document.querySelectorAll(groupSelector).forEach((groupEl) => {
+      getWorkspaceGroupElements(currentWorkspaceId).forEach((groupEl) => {
         const label = groupEl.getAttribute("label");
         if (label) {
           // Get tabs in this group to calculate group embedding
@@ -1683,107 +2010,11 @@
         );
 
         if (groups.length > 0) {
-          // Extract keywords function
-          function extractKeywords(titles) {
-            const allWords = titles
-              .join(" ")
-              .toLowerCase()
-              .replace(/[^\w\s]/g, " ")
-              .split(/\s+/)
-              .filter((word) => word.length > 2);
-
-            const wordCount = {};
-            allWords.forEach((word) => {
-              wordCount[word] = (wordCount[word] || 0) + 1;
-            });
-
-            const stopWords = new Set([
-              "the",
-              "and",
-              "for",
-              "are",
-              "but",
-              "not",
-              "you",
-              "all",
-              "can",
-              "had",
-              "her",
-              "was",
-              "one",
-              "our",
-              "out",
-              "day",
-              "get",
-              "has",
-              "him",
-              "his",
-              "how",
-              "man",
-              "new",
-              "now",
-              "old",
-              "see",
-              "two",
-              "way",
-              "who",
-              "boy",
-              "did",
-              "its",
-              "let",
-              "put",
-              "say",
-              "she",
-              "too",
-              "use",
-            ]);
-
-            const keywords = Object.entries(wordCount)
-              .filter(([word]) => !stopWords.has(word))
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 5)
-              .map(([word]) => word);
-
-            return keywords;
-          }
-
           // Group naming via Firefox's on-device Mozilla/smart-tab-topic.
           // This path only runs when OpenRouter is NOT configured — the
           // OpenRouter engine does its own naming as part of a single
           // full-grouping request (see `askOpenRouterForGroups`), so we
           // don't need a separate naming hop here.
-          async function nameGroupWithSmartTabTopic(titles) {
-            const keywords = extractKeywords(titles);
-            const input = `Topic from keywords: ${keywords.join(
-              ", "
-            )}. titles:\n${titles.join("\n")}`;
-
-            try {
-              const { createEngine } = ChromeUtils.importESModule(
-                "chrome://global/content/ml/EngineProcess.sys.mjs"
-              );
-              let engine = await createEngine({
-                taskName: "text2text-generation",
-                modelId: "Mozilla/smart-tab-topic",
-                modelHub: "huggingface",
-                engineId: "group-namer",
-              });
-
-              const aiResult = await engine.run({
-                args: [input],
-                options: { max_new_tokens: 8, temperature: 0.7 },
-              });
-
-              return sanitizeGroupName(
-                aiResult[0]?.generated_text || "Group",
-                titles
-              );
-            } catch (e) {
-              console.error("[TabSort][AI] Error naming group:", e);
-              return "Group";
-            }
-          }
-
           // Process each new group
           for (let groupIdx = 0; groupIdx < groups.length; groupIdx++) {
             const group = groups[groupIdx];
@@ -2007,6 +2238,16 @@
       }
     }
     return groups;
+  };
+
+  const getUniqueGroupLabel = (groups, label) => {
+    const base = (label || "Group").toString().trim() || "Group";
+    if (!groups[base]) return base;
+    let suffix = 2;
+    while (groups[`${base} ${suffix}`]) {
+      suffix++;
+    }
+    return `${base} ${suffix}`;
   };
 
   // --- Fuzzy Grouping (AI-off fallback) ----------------------------------
@@ -2283,8 +2524,10 @@
     clusterList.forEach((tabs, idx) => {
       if (mergedInto[idx] !== -1) return;
       if (tabs.length < 2) return;
-      let label = nameFuzzyCluster(tabs, meta, idf);
-      while (finalGroups[label]) label = `${label} 2`;
+      const label = getUniqueGroupLabel(
+        finalGroups,
+        nameFuzzyCluster(tabs, meta, idf)
+      );
       finalGroups[label] = tabs;
     });
 
@@ -2423,14 +2666,11 @@
       separatorsToSort = domCache.getSeparators();
       // Apply visual indicator
       if (separatorsToSort.length > 0) {
-        batchDOMUpdates([
-          () =>
-            separatorsToSort.forEach((sep) => {
-              if (sep?.isConnected) {
-                sep.classList.add("separator-is-sorting");
-              }
-            }),
-        ]);
+        separatorsToSort.forEach((sep) => {
+          if (sep?.isConnected) {
+            sep.classList.add("separator-is-sorting");
+          }
+        });
       }
 
       const currentWorkspaceId = window.gZenWorkspaces?.activeWorkspace;
@@ -2441,9 +2681,9 @@
 
       // --- Step 1: Get ALL Existing Group Names for Context ---
       const allExistingGroupNames = new Set();
-      const groupSelector = `:is(tab-group, zen-folder):has(tab[zen-workspace-id="${currentWorkspaceId}"])`;
+      const workspaceGroups = getWorkspaceGroupElements(currentWorkspaceId);
 
-      document.querySelectorAll(groupSelector).forEach((groupEl) => {
+      workspaceGroups.forEach((groupEl) => {
         const label = groupEl.getAttribute("label");
         if (label) {
           allExistingGroupNames.add(label);
@@ -2462,20 +2702,12 @@
         includeEmpty: false,
         includeGlance: false,
       }).filter((tab) => {
-        const groupParent =
-          tab.group ?? tab.closest(":is(tab-group, zen-folder)");
-        const isInGroupInCorrectWorkspace = groupParent
-          ? groupParent.matches(groupSelector)
-          : false;
-        return !isInGroupInCorrectWorkspace;
+        if (shouldProtectTabFromGrouping(tab)) return false;
+        return !isTabInWorkspaceGroup(tab, currentWorkspaceId);
       });
 
-      console.log(
-        "[TabSort] Debug - Initial tabs to sort count:",
-        initialTabsToSort.length
-      );
       if (initialTabsToSort.length === 0) {
-        console.log("[TabSort] Debug - No tabs to sort, returning early");
+        console.log("[TabSort] No eligible tabs to sort in current workspace.");
         return;
       }
 
@@ -2498,10 +2730,12 @@
       // separator when the model worked but every group happened to be a
       // singleton that got absorbed by rescue passes.
       let engineProducedGroups = false;
-      const aiEnabled = isAIEnabled();
-      const openRouterEnabled = isOpenRouterConfigured();
+      const engineDecision = chooseGroupingEngine(initialTabsToSort);
+      console.log(
+        `[TabSort] Engine selected: ${engineDecision.engine} (${engineDecision.reason})`
+      );
 
-      if (openRouterEnabled) {
+      if (engineDecision.engine === "openrouter") {
         console.log(
           "[TabSort] Using OpenRouter full-grouping for",
           initialTabsToSort.length,
@@ -2529,7 +2763,7 @@
             allExistingGroupNames
           );
         }
-      } else if (aiEnabled) {
+      } else if (engineDecision.engine === "local-ai") {
         console.log(
           "[TabSort] Using local AI grouping for",
           initialTabsToSort.length,
@@ -2587,48 +2821,56 @@
         !engineProducedGroups &&
         initialTabsToSort.length > 1;
 
-      console.log("[TabSort] Debug - Initial tabs:", initialTabsToSort.length);
-      console.log("[TabSort] Debug - Final groups:", Object.keys(finalGroups));
-      console.log("[TabSort] Debug - Multi-tab groups:", multiTabGroups.length);
-      console.log("[TabSort] Debug - Sorting failed:", sortingFailed);
-
       if (sortingFailed) {
         if (CONFIG.ENABLE_FAILURE_ANIMATION) startFailureAnimation();
         return;
       }
 
       if (Object.keys(finalGroups).length === 0) {
-        console.log(
-          "[TabSort] Debug - No final groups, returning early (this should not happen after failure detection)"
-        );
+        console.log("[TabSort] No groups produced after rescue pipeline.");
         return;
       }
 
       // --- Get existing group ELEMENTS ---
-      const existingGroupElementsMap = new Map();
-      document.querySelectorAll(groupSelector).forEach((groupEl) => {
+      const existingContainersByLabel = new Map();
+      workspaceGroups.forEach((groupEl) => {
         const label = groupEl.getAttribute("label");
-        if (label && !groupEl?.group?.isZenFolder) {
-          existingGroupElementsMap.set(label, groupEl);
+        if (!label) return;
+        const key = getLabelKey(label);
+        if (!key) return;
+        const entry = existingContainersByLabel.get(key) || {
+          folder: null,
+          group: null,
+        };
+        if (isFolderGroupElement(groupEl)) {
+          entry.folder = groupEl;
+        } else {
+          entry.group = groupEl;
         }
+        existingContainersByLabel.set(key, entry);
       });
+
+      const getExistingContainer = (topic) => {
+        const key = getLabelKey(topic);
+        if (!key) return null;
+        const entry = existingContainersByLabel.get(key);
+        if (!entry) return null;
+        return useFolders ? entry.folder : entry.group;
+      };
 
       // --- Process each final, consolidated group ---
       for (const topic in finalGroups) {
         const tabsForThisTopic = finalGroups[topic].filter((t) => {
-          const groupParent =
-            t.group ?? t.closest(":is(tab-group, zen-folder)");
-          const isInGroupInCorrectWorkspace = groupParent
-            ? groupParent.matches(groupSelector)
-            : false;
-          return t && t.isConnected && !isInGroupInCorrectWorkspace;
+          if (!t?.isConnected) return false;
+          if (shouldProtectTabFromGrouping(t)) return false;
+          return !isTabInWorkspaceGroup(t, currentWorkspaceId);
         });
 
         if (tabsForThisTopic.length === 0) {
           continue;
         }
 
-        const existingGroupElement = existingGroupElementsMap.get(topic);
+        const existingGroupElement = getExistingContainer(topic);
 
         if (existingGroupElement && existingGroupElement.isConnected) {
           try {
@@ -2641,13 +2883,8 @@
               }
             }
             for (const tab of tabsForThisTopic) {
-              const groupParent =
-                tab.group ?? tab.closest(":is(tab-group, zen-folder)");
-              const isInGroupInCorrectWorkspace = groupParent
-                ? groupParent.matches(groupSelector)
-                : false;
-              if (tab && tab.isConnected && !isInGroupInCorrectWorkspace) {
-                if (existingGroupElement?.isZenFolder) {
+              if (tab && tab.isConnected && !isTabInWorkspaceGroup(tab, currentWorkspaceId)) {
+                if (isFolderGroupElement(existingGroupElement)) {
                   // Zen folders only hold pinned tabs, so pin before adding or
                   // the tab appears to move but never attaches to the folder.
                   try {
@@ -2695,9 +2932,12 @@
                       tabsForThisTopic,
                       currentWorkspaceId
                     );
-                    if (createdContainer?.isConnected) {
-                      existingGroupElementsMap.set(topic, createdContainer);
-                    }
+                    upsertContainerByLabel(
+                      existingContainersByLabel,
+                      topic,
+                      "folder",
+                      createdContainer
+                    );
                   }
                 } else {
                   createdContainer = findTopLevelFolderByLabel(
@@ -2722,7 +2962,12 @@
                       createdContainer.addTabs(tabsForFolder);
                     }
                     createdContainer.collapsed = false;
-                    existingGroupElementsMap.set(topic, createdContainer);
+                    upsertContainerByLabel(
+                      existingContainersByLabel,
+                      topic,
+                      "folder",
+                      createdContainer
+                    );
                   } else {
                     // Pass tabs directly to createFolder so it pins and attaches
                     // them atomically. Passing [] then calling addTabs leaves the
@@ -2737,7 +2982,12 @@
                     );
                     if (createdContainer?.isConnected) {
                       createdContainer.collapsed = false;
-                      existingGroupElementsMap.set(topic, createdContainer);
+                      upsertContainerByLabel(
+                        existingContainersByLabel,
+                        topic,
+                        "folder",
+                        createdContainer
+                      );
                     }
                   }
                 }
@@ -2751,9 +3001,12 @@
                   tabsForThisTopic,
                   groupOptions
                 );
-                if (newGroup?.isConnected) {
-                  existingGroupElementsMap.set(topic, newGroup);
-                }
+                upsertContainerByLabel(
+                  existingContainersByLabel,
+                  topic,
+                  "group",
+                  newGroup
+                );
               }
             } catch (e) {
               console.error(`Error creating container for topic "${topic}":`, e);
@@ -2765,68 +3018,12 @@
 
       // --- Reorder tabs: groups first, then ungrouped tabs ---
       try {
-        if (!CONFIG.REORDER_GROUPS_FIRST) {
-          return;
-        }
         const workspaceElement = gZenWorkspaces?.activeWorkspaceElement;
-        
-        if (workspaceElement?.tabsContainer) {
-          const tabsContainer = workspaceElement.tabsContainer;
-          const allChildren = Array.from(tabsContainer.children);
-          
-          // Separate groups and ungrouped tabs
-          // Since we're in the workspace's tabsContainer, all direct children belong to this workspace
-          const groups = [];
-          const ungroupedTabs = [];
-          const otherElements = []; // For any other elements (like periphery hbox)
-          
-          for (const child of allChildren) {
-            const tagName = child.tagName?.toLowerCase();
-            if (tagName === "tab-group") {
-              // All tab-groups in this container belong to the workspace
-              groups.push(child);
-            } else if (tagName === "tab") {
-              // Check if tab is valid (not empty, not glance)
-              if (
-                !child.hasAttribute("zen-empty-tab") &&
-                !child.hasAttribute("zen-glance-tab")
-              ) {
-                ungroupedTabs.push(child);
-              } else {
-                otherElements.push(child);
-              }
-            } else {
-              // Other elements (like hbox periphery)
-              otherElements.push(child);
-            }
-          }
-          
-          console.log("[TabSort] Reorder - groups:", groups.length, "ungrouped:", ungroupedTabs.length);
-          
-          // Only reorder if we have both groups AND ungrouped tabs
-          if (groups.length > 0 && ungroupedTabs.length > 0) {
-            console.log("[TabSort] Reorder - Moving ungrouped tabs below groups...");
-            
-            // Move each ungrouped tab to after the last group
-            const lastGroup = groups[groups.length - 1];
-            let insertAfterElement = lastGroup;
-            
-            ungroupedTabs.forEach((tab) => {
-              if (tab.isConnected && insertAfterElement?.isConnected) {
-                // Insert tab after the reference element
-                const nextSibling = insertAfterElement.nextSibling;
-                if (nextSibling) {
-                  tabsContainer.insertBefore(tab, nextSibling);
-                } else {
-                  tabsContainer.appendChild(tab);
-                }
-                insertAfterElement = tab;
-              }
-            });
-            
-            console.log("[TabSort] Reorder - Complete!");
-          }
-        }
+        reorderWorkspaceTabs(
+          workspaceElement,
+          finalGroups,
+          shouldProtectTabFromGrouping
+        );
       } catch (reorderError) {
         console.error("Error reordering tabs (groups first):", reorderError);
         // Don't fail the whole sort if reordering fails
@@ -2841,12 +3038,9 @@
           setSortingVisualState(false);
           cleanupAnimation();
           if (separatorsToSort.length > 0) {
-            batchDOMUpdates([
-              () =>
-                separatorsToSort.forEach((sep) => {
-                  if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
-                }),
-            ]);
+            separatorsToSort.forEach((sep) => {
+              if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
+            });
           }
         }, CONFIG.FAILURE_PULSE_DURATION * CONFIG.FAILURE_PULSE_COUNT + 300);
       } else {
@@ -2855,12 +3049,9 @@
           setSortingVisualState(false);
           cleanupAnimation();
           if (separatorsToSort.length > 0) {
-            batchDOMUpdates([
-              () =>
-                separatorsToSort.forEach((sep) => {
-                  if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
-                }),
-            ]);
+            separatorsToSort.forEach((sep) => {
+              if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
+            });
           }
         }, 800);
       }
@@ -3024,28 +3215,56 @@
   }
 
   function ensureSidebarContextMenu() {
+    if (sidebarMenuListenersAdded) {
+      ensureFallbackPopup();
+      return;
+    }
+
+    sidebarMenuListenersAdded = true;
+
     // Build (and stash) the fallback popup up front so it's ready to show
     // on demand. Building it lazily from the contextmenu handler races
     // with the event default.
     ensureFallbackPopup();
 
+    sidebarPopupShowingHandler = (event) => {
+      const popup = event.target;
+      if (!popup || popup.tagName !== "menupopup") return;
+
+      // Don't self-inject into our own fallback popup (already populated).
+      if (popup.id === "tidy-tabs-sidebar-menu") return;
+
+      // Skip bookmarks/history/etc. menus where triggerNode is null.
+      const trigger = popup.triggerNode;
+      if (!isSidebarBackgroundTrigger(trigger)) return;
+
+      injectItemsInto(popup);
+    };
+
+    sidebarContextMenuHandler = (event) => {
+      const trigger = event.target;
+      if (!isSidebarBackgroundTrigger(trigger)) return;
+
+      // If the event is already going to bring up a native menu (because
+      // an ancestor has `context="..."`), just let popupshowing handle it.
+      const hasNativeContext =
+        !!trigger.closest?.("[context]") ||
+        !!trigger.closest?.("[popup]");
+      if (hasNativeContext) return;
+
+      const popup = ensureFallbackPopup();
+      if (!popup) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      popup.openPopupAtScreen(event.screenX, event.screenY, true);
+    };
+
     // Primary path: intercept every popupshowing. If the popup was
     // triggered from the sidebar background, inject our items.
     document.addEventListener(
       "popupshowing",
-      (event) => {
-        const popup = event.target;
-        if (!popup || popup.tagName !== "menupopup") return;
-
-        // Don't self-inject into our own fallback popup (already populated).
-        if (popup.id === "tidy-tabs-sidebar-menu") return;
-
-        // Skip bookmarks/history/etc. menus where triggerNode is null.
-        const trigger = popup.triggerNode;
-        if (!isSidebarBackgroundTrigger(trigger)) return;
-
-        injectItemsInto(popup);
-      },
+      sidebarPopupShowingHandler,
       true
     );
 
@@ -3055,46 +3274,29 @@
     // the default has already done so by the time we run.
     document.addEventListener(
       "contextmenu",
-      (event) => {
-        const trigger = event.target;
-        if (!isSidebarBackgroundTrigger(trigger)) return;
-
-        // If the event is already going to bring up a native menu (because
-        // an ancestor has `context="..."`), just let popupshowing handle it.
-        const hasNativeContext =
-          !!trigger.closest?.("[context]") ||
-          !!trigger.closest?.("[popup]");
-        if (hasNativeContext) return;
-
-        const popup = ensureFallbackPopup();
-        if (!popup) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-        popup.openPopupAtScreen(event.screenX, event.screenY, true);
-      },
+      sidebarContextMenuHandler,
       true
     );
   }
 
   // --- gZenWorkspaces Hooks ---
   function setupgZenWorkspacesHooks() {
-    if (typeof window.gZenWorkspaces === "undefined") {
+    if (typeof window.gZenWorkspaces === "undefined" || gZenWorkspaceHooksApplied) {
       return;
     }
 
-    const originalOnTabBrowserInserted =
+    originalWorkspaceOnTabBrowserInserted =
       window.gZenWorkspaces.onTabBrowserInserted;
-    const originalUpdateTabsContainers =
+    originalWorkspaceUpdateTabsContainers =
       window.gZenWorkspaces.updateTabsContainers;
 
     window.gZenWorkspaces.onTabBrowserInserted = function (event) {
-      if (typeof originalOnTabBrowserInserted === "function") {
+      if (typeof originalWorkspaceOnTabBrowserInserted === "function") {
         try {
-          originalOnTabBrowserInserted.call(window.gZenWorkspaces, event);
+          originalWorkspaceOnTabBrowserInserted.call(window.gZenWorkspaces, event);
         } catch (e) {
           console.error(
-            "SORT BTN HOOK: Error in original onTabBrowserInserted:",
+            "[TidyTabs] Error in original onTabBrowserInserted:",
             e
           );
         }
@@ -3103,36 +3305,46 @@
     };
 
     window.gZenWorkspaces.updateTabsContainers = function (...args) {
-      if (typeof originalUpdateTabsContainers === "function") {
+      if (typeof originalWorkspaceUpdateTabsContainers === "function") {
         try {
-          originalUpdateTabsContainers.apply(window.gZenWorkspaces, args);
+          originalWorkspaceUpdateTabsContainers.apply(window.gZenWorkspaces, args);
         } catch (e) {
           console.error(
-            "SORT BTN HOOK: Error in original updateTabsContainers:",
+            "[TidyTabs] Error in original updateTabsContainers:",
             e
           );
         }
       }
       treeConnectors?.scheduleUpdate?.();
     };
+
+    gZenWorkspaceHooksApplied = true;
   }
 
   // --- Patch Clear Button to Preserve Tab-Groups ---
   function patchClearButtonToPreserveGroups() {
-    if (!CONFIG.ENABLE_CLEAR_BUTTON_PATCH) {
-      return;
-    }
-
     if (typeof window.gZenWorkspaces === "undefined") {
       console.warn("[TidyTabs] gZenWorkspaces not available, cannot patch clear button");
       return;
     }
 
-    // Store the original method
-    const originalCloseAllUnpinnedTabs = window.gZenWorkspaces.closeAllUnpinnedTabs;
+    if (clearButtonPatched && originalCloseAllUnpinnedTabs) {
+      if (!CONFIG.ENABLE_CLEAR_BUTTON_PATCH) {
+        window.gZenWorkspaces.closeAllUnpinnedTabs = originalCloseAllUnpinnedTabs;
+      }
+      return;
+    }
+
+    if (!CONFIG.ENABLE_CLEAR_BUTTON_PATCH) {
+      return;
+    }
+
+    // Store the original method once
+    originalCloseAllUnpinnedTabs = window.gZenWorkspaces.closeAllUnpinnedTabs;
     
     if (typeof originalCloseAllUnpinnedTabs !== "function") {
       console.warn("[TidyTabs] closeAllUnpinnedTabs method not found");
+      originalCloseAllUnpinnedTabs = null;
       return;
     }
 
@@ -3148,55 +3360,46 @@
           return;
         }
         
-        // Get all tabs and filter to ONLY the active workspace
-        const allTabs = Array.from(gBrowser.tabs).filter(tab => {
-          const tabWorkspaceId = tab.getAttribute("zen-workspace-id");
-          return tabWorkspaceId === currentWorkspaceId;
+        // Workspace-scoped tab snapshots.
+        const allTabs = getFilteredTabs(currentWorkspaceId, {
+          includeGrouped: true,
+          includeSelected: true,
+          includePinned: true,
+          includeEmpty: true,
+          includeGlance: true,
         });
-        
-        // Filter tabs to close: exclude pinned, grouped, essential, empty, and selected tabs
-        const tabsToClose = allTabs.filter(tab => {
-          // Safety check
-          if (!tab || !tab.isConnected) return false;
-          
-          // Don't close the selected tab
-          if (tab.selected) {
-            return false;
-          }
-          
-          // Don't close pinned tabs
-          if (tab.pinned) {
-            return false;
-          }
-          
-          // Don't close tabs that are in a group/folder
-          if (tab.group) {
-            // Check if it's a zen-folder
-            if (tab.group.isZenFolder || tab.group.tagName === "zen-folder") {
-              return false;
-            }
-            // Check if it's a regular tab-group (not split-view)
-            if (tab.group.tagName === "tab-group" && !tab.group.hasAttribute("split-view-group")) {
-              return false;
-            }
-          }
-          
-          // Don't close essential tabs
+        const closeCandidates = getFilteredTabs(currentWorkspaceId, {
+          includeGrouped: true,
+          includeSelected: false,
+          includePinned: false,
+          includeEmpty: false,
+          includeGlance: false,
+        });
+
+        // Preserve grouped/folder tabs (except split-view groups) while still
+        // clearing truly loose tabs. `getTabContainerGroup` is used instead of
+        // `tab.group` because Zen occasionally exposes group ancestry via DOM
+        // without wiring the direct `tab.group` property.
+        const tabsToClose = closeCandidates.filter((tab) => {
           if (tab.hasAttribute("zen-essential")) {
             return false;
           }
-          
-          // Don't close empty tabs
-          if (tab.hasAttribute("zen-empty-tab")) {
+
+          const groupContainer = getTabContainerGroup(tab);
+          if (!groupContainer) return true;
+
+          if (isFolderGroupElement(groupContainer)) {
             return false;
           }
-          
-          // Don't close glance tabs
-          if (tab.hasAttribute("zen-glance-tab")) {
+
+          const groupTag = groupContainer.tagName?.toLowerCase();
+          if (
+            groupTag === "tab-group" &&
+            !groupContainer.hasAttribute("split-view-group")
+          ) {
             return false;
           }
-          
-          // This tab can be closed
+
           return true;
         });
         
@@ -3223,9 +3426,64 @@
         }
       }
     };
+    clearButtonPatched = true;
     
     console.log("[TidyTabs] Successfully patched closeAllUnpinnedTabs to preserve tab-groups");
   }
+
+  const isLooseUngroupedTab = (node) =>
+    node?.tagName?.toLowerCase() === "tab" &&
+    !node.hasAttribute("zen-empty-tab") &&
+    !node.hasAttribute("zen-glance-tab") &&
+    !getTabContainerGroup(node);
+
+  const moveNodeAfter = (node, anchor, container) => {
+    if (!node?.isConnected || !container?.isConnected) return anchor;
+    if (!anchor?.isConnected) {
+      if (container.lastChild !== node) {
+        container.appendChild(node);
+      }
+      return node;
+    }
+    const next = anchor.nextSibling;
+    if (next) {
+      container.insertBefore(node, next);
+    } else {
+      container.appendChild(node);
+    }
+    return node;
+  };
+
+  const reorderWorkspaceTabs = (workspaceElement, _finalGroups, protectHost) => {
+    if (!workspaceElement?.tabsContainer || !CONFIG.REORDER_GROUPS_FIRST) return;
+
+    const tabsContainer = workspaceElement.tabsContainer;
+
+    const allChildren = Array.from(tabsContainer.children);
+    const groupedChildren = allChildren.filter(
+      (child) => {
+        const tag = child?.tagName?.toLowerCase();
+        return tag === "tab-group" || tag === "zen-folder";
+      }
+    );
+    if (!groupedChildren.length) return;
+    let anchor = groupedChildren[groupedChildren.length - 1];
+
+    const looseTabs = Array.from(tabsContainer.children).filter((child) =>
+      isLooseUngroupedTab(child)
+    );
+    if (!looseTabs.length) return;
+
+    looseTabs.forEach((tab) => {
+      if (protectHost(tab)) return;
+      anchor = moveNodeAfter(tab, anchor, tabsContainer);
+    });
+
+    const protectedLooseTabs = looseTabs.filter((tab) => protectHost(tab));
+    protectedLooseTabs.forEach((tab) => {
+      anchor = moveNodeAfter(tab, anchor, tabsContainer);
+    });
+  };
 
   // --- Add Tab Event Listeners ---
   function addTabEventListeners() {
@@ -3237,25 +3495,13 @@
       return;
     }
 
-    const events = [
-      "TabOpen",
-      "TabClose",
-      "TabSelect",
-      "TabPinned",
-      "TabUnpinned",
-      "TabGroupAdd",
-      "TabGroupRemove",
-      "TabGrouped",
-      "TabUngrouped",
-      "TabAttrModified",
-      "TabMove",
-    ];
+    tabContainerEventHandler = () => {
+      treeConnectors?.scheduleUpdate?.();
+      scheduleFaviconRefresh();
+    };
 
-    events.forEach((eventName) => {
-      gBrowser.tabContainer.addEventListener(eventName, () => {
-        treeConnectors?.scheduleUpdate?.();
-        refreshGroupFaviconColors();
-      });
+    TAB_CONTAINER_EVENTS.forEach((eventName) => {
+      gBrowser.tabContainer.addEventListener(eventName, tabContainerEventHandler);
     });
 
     eventListenersAdded = true;
@@ -3266,6 +3512,74 @@
     try {
       // Stop any running animations
       cleanupAnimation();
+
+      if (faviconRefreshRaf !== null) {
+        cancelAnimationFrame(faviconRefreshRaf);
+        faviconRefreshRaf = null;
+      }
+      faviconRefreshPending = false;
+      faviconRefreshInFlight = false;
+
+      if (clearButtonPatched && originalCloseAllUnpinnedTabs && window.gZenWorkspaces) {
+        window.gZenWorkspaces.closeAllUnpinnedTabs = originalCloseAllUnpinnedTabs;
+        clearButtonPatched = false;
+      }
+      originalCloseAllUnpinnedTabs = null;
+
+      if (gZenWorkspaceHooksApplied && window.gZenWorkspaces) {
+        if (typeof originalWorkspaceOnTabBrowserInserted === "function") {
+          window.gZenWorkspaces.onTabBrowserInserted =
+            originalWorkspaceOnTabBrowserInserted;
+        }
+        if (typeof originalWorkspaceUpdateTabsContainers === "function") {
+          window.gZenWorkspaces.updateTabsContainers =
+            originalWorkspaceUpdateTabsContainers;
+        }
+        gZenWorkspaceHooksApplied = false;
+      }
+      originalWorkspaceOnTabBrowserInserted = null;
+      originalWorkspaceUpdateTabsContainers = null;
+
+      if (
+        eventListenersAdded &&
+        tabContainerEventHandler &&
+        typeof gBrowser !== "undefined" &&
+        gBrowser?.tabContainer
+      ) {
+        TAB_CONTAINER_EVENTS.forEach((eventName) => {
+          gBrowser.tabContainer.removeEventListener(eventName, tabContainerEventHandler);
+        });
+      }
+      tabContainerEventHandler = null;
+
+      if (sidebarPopupShowingHandler) {
+        document.removeEventListener(
+          "popupshowing",
+          sidebarPopupShowingHandler,
+          true
+        );
+        sidebarPopupShowingHandler = null;
+      }
+
+      if (sidebarContextMenuHandler) {
+        document.removeEventListener(
+          "contextmenu",
+          sidebarContextMenuHandler,
+          true
+        );
+        sidebarContextMenuHandler = null;
+      }
+      sidebarMenuListenersAdded = false;
+
+      if (fallbackPopup?.isConnected) {
+        fallbackPopup.remove();
+      }
+      fallbackPopup = null;
+
+      embeddingEnginePromise = null;
+      namingEnginePromise = null;
+      EMBEDDING_CACHE.clear();
+      FAVICON_COLOR_CACHE.clear();
 
       // Clear DOM cache
       domCache.invalidate();
@@ -3286,27 +3600,21 @@
   function initializeScript() {
     const tryInitialize = () => {
       try {
-        const separatorExists = domCache.getSeparators().length > 0;
-        const commandSetExists = !!domCache.getCommandSet();
         const gBrowserReady =
           typeof gBrowser !== "undefined" && gBrowser?.tabContainer;
         const gZenWorkspacesReady =
           typeof window.gZenWorkspaces !== "undefined";
 
-        const ready =
-          gBrowserReady &&
-          commandSetExists &&
-          separatorExists &&
-          gZenWorkspacesReady;
+        const ready = gBrowserReady && gZenWorkspacesReady;
 
         if (ready) {
           ensureSidebarContextMenu();
           setupgZenWorkspacesHooks();
-          patchClearButtonToPreserveGroups(); // Patch the clear button
+          patchClearButtonToPreserveGroups();
           treeConnectors = new TidyTabsTreeConnectors();
           treeConnectors.init();
           addTabEventListeners();
-          refreshGroupFaviconColors();
+          scheduleFaviconRefresh();
 
           return true;
         }

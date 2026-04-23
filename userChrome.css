@@ -125,7 +125,7 @@ tab-group:not(zen-folder) > .tab-group-label-container {
 }
 
 /* Subtle 1px divider above the label acts as a quiet section break. */
-tab-group:not(zen-folder) > .tab-group-label-container::before {
+/* tab-group:not(zen-folder) > .tab-group-label-container::before {
   content: "";
   position: absolute;
   left: 12px;
@@ -134,7 +134,7 @@ tab-group:not(zen-folder) > .tab-group-label-container::before {
   height: 1px;
   background: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.06));
   pointer-events: none;
-}
+} */
 
 /* No stray right-side decorations. */
 tab-group:not(zen-folder) > .tab-group-label-container::after {

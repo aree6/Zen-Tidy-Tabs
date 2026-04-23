@@ -4,10 +4,10 @@ Sort your tabs with a choice of three engines — a remote LLM via OpenRouter, F
 
 ## What's integrated
 
-- Topic-based tab grouping with three engines (auto-selected in this order):
-  - **OpenRouter** — one-shot remote LLM grouping + naming. Active when you've set an API key and picked a model. Best quality; one HTTP request per sort.
-  - **Local AI** (Firefox's on-device ML embeddings) when `browser.ml.enabled` is on and OpenRouter is not configured.
-  - **Fuzzy** (deterministic token + hostname clustering) as the final fallback. No model required; also used when either remote engine errors out.
+- Topic-based tab grouping with three engines (auto-selected with smart heuristics):
+  - **OpenRouter** — one-shot remote LLM grouping + naming. Used when configured and tab titles have strong topic signal.
+  - **Local AI** (Firefox's on-device ML embeddings) when `browser.ml.enabled` is on, title signal is strong, and OpenRouter is not selected.
+  - **Fuzzy** (deterministic token + hostname clustering) for low-signal/very-large tab sets, and as the fallback when model paths fail.
 - Drops tabs into existing groups/folders when they match; creates new ones otherwise.
 - Refined, minimal tab-group label styling (no colored accent line). Folders keep their native look.
 - Clear-button patch that preserves grouped/folder tabs.
@@ -22,9 +22,9 @@ Right-click the **sidebar background** (the empty space in your tab area) to ope
 
 Both entries use the same engine under the hood:
 
-- If **OpenRouter is configured** (API key + model selected), all loose tabs go to the chosen LLM in a single request. The model returns a JSON map of `{ "Topic": [tab numbers] }` which is then applied to the sidebar. Title + hostname are sent; full URLs are not.
-- Else if **local AI is enabled** (`browser.ml.enabled = true`), Firefox's on-device embedding model clusters tabs and a second local model names each cluster.
-- Else a **deterministic fuzzy pipeline** runs:
+- If **OpenRouter is configured** (API key + model selected) and your tabs have useful title signal, loose tabs go to the chosen LLM in a single request. The model returns a JSON map of `{ "Topic": [tab numbers] }` which is then applied to the sidebar. Title + hostname are sent; full URLs are not.
+- Else if **local AI is enabled** (`browser.ml.enabled = true`) and title signal is strong, Firefox's on-device embedding model clusters tabs and a second local model names each cluster.
+- Else a **deterministic fuzzy pipeline** runs (also used for low-signal titles or very large batches):
   1. Tokenize each tab's title + hostname (stopwords removed).
   2. Seed clusters by hostname.
   3. Merge clusters whose token sets overlap above a Jaccard threshold.
@@ -46,10 +46,11 @@ Any OpenRouter failure (network, rate limit, bad JSON, timeout) silently degrade
 | Menu: Show 'Tidy Tabs into Groups' | `zen.tidytabs.menu.sort-groups` | `true` |
 | Menu: Show 'Tidy Tabs into Folders' | `zen.tidytabs.menu.sort-folders` | `true` |
 | Group leftovers as 'Miscellaneous' | `zen.tidytabs.group-leftovers-as-misc` | `true` |
+| Protected hosts (never auto-group) | `zen.tidytabs.behavior.protected-hosts` | `""` |
 | OpenRouter API Key | `zen.tidytabs.openrouter.api-key` | `""` |
-| AI Group Namer | `zen.tidytabs.ai.group-namer` | `local` |
+| Grouping Engine | `zen.tidytabs.ai.group-namer` | `local` |
 
-> **Tip:** **Grouping Strength** (0–1) is a single knob that drives both AI and fuzzy modes. **0 = conservative** (only near-identical tabs group); **1 = aggressive** (loosely-related tabs still group). Default `0.5` is balanced. Disable either menu entry if you only use one container style.
+> **Tip:** **Grouping Strength** (0–1) is a single knob that drives both AI and fuzzy modes. **0 = conservative** (only near-identical tabs group); **1 = aggressive** (loosely-related tabs still group). Default `0.5` is balanced. Use **Protected hosts** for apps like mail/calendar/chat that should always stay loose.
 
 ## Optional: OpenRouter for smarter grouping
 
@@ -57,7 +58,7 @@ By default, grouping runs fully on-device (local AI when `browser.ml.enabled` is
 
 1. Grab a free API key at [openrouter.ai/keys](https://openrouter.ai/keys).
 2. Paste it into **OpenRouter API Key** in the mod settings.
-3. Pick a model from **AI Group Namer**:
+3. Pick a model from **Grouping Engine**:
 
 | Option | Model | Why |
 |---|---|---|
