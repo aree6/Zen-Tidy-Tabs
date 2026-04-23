@@ -792,6 +792,68 @@
     containerMap.set(key, entry);
   };
 
+  // --- Tab-Group Collapse Fix (ported from AdvancedTabGroups) ---
+  // Zen's native collapse toggle expects a `.group-marker` inside the
+  // label container and the `tab-group-editor-mode-create` class to be
+  // absent. Without these, newly-created groups are stuck in editor mode
+  // and clicks on the header silently do nothing.
+  const processTabGroup = (group) => {
+    if (
+      !group?.isConnected ||
+      group.hasAttribute("data-tidy-tabs-processed") ||
+      group.classList.contains("zen-folder") ||
+      group.hasAttribute("zen-folder") ||
+      group.hasAttribute("split-view-group")
+    ) {
+      return;
+    }
+
+    const labelContainer = group.querySelector(".tab-group-label-container");
+    if (!labelContainer) return;
+
+    // Remove editor-mode class that blocks collapse clicks
+    group.classList.remove("tab-group-editor-mode-create");
+
+    // Strip default context so built-in menus don't intercept the click
+    labelContainer.removeAttribute("context");
+    group.removeAttribute("context");
+
+    // Inject collapse-toggle marker if absent
+    if (!labelContainer.querySelector(".group-marker")) {
+      try {
+        const frag =
+          window.MozXULElement?.parseXULToFragment?.(
+            `<div class="tab-group-icon-container">\n` +
+            `  <div class="tab-group-icon"></div>\n` +
+            `  <image class="group-marker" role="button" keyNav="false" tooltiptext="Toggle Group"/>\n` +
+            `</div>\n` +
+            `<image class="tab-close-button close-icon" role="button" keyNav="false" tooltiptext="Close Group"/>`
+          );
+        if (frag) {
+          const iconContainer = frag.children[0];
+          const closeButton = frag.children[1];
+          labelContainer.insertBefore(iconContainer, labelContainer.firstChild);
+          labelContainer.appendChild(closeButton);
+        }
+      } catch (e) {
+        // Fallback: standard DOM marker if XUL parsing fails
+        const marker = document.createElement("div");
+        marker.className = "group-marker";
+        marker.setAttribute("role", "button");
+        labelContainer.insertBefore(marker, labelContainer.firstChild);
+      }
+    }
+
+    group.setAttribute("data-tidy-tabs-processed", "true");
+  };
+
+  const processExistingTabGroups = () => {
+    const groups = document.querySelectorAll(
+      'tab-group:not([data-tidy-tabs-processed]):not([split-view-group]):not([zen-folder])'
+    );
+    groups.forEach((group) => processTabGroup(group));
+  };
+
   const getWorkspaceGroupElements = (workspaceId) =>
     Array.from(document.querySelectorAll(GROUP_NODE_SELECTOR)).filter((groupEl) =>
       isGroupInWorkspace(groupEl, workspaceId)
@@ -845,10 +907,8 @@
           renameFolder: false,
           label: childName,
           workspaceId,
+          insertAfter: parentFolder.groupContainer?.lastElementChild,
         });
-        if (parentFolder.tabs?.[0] && childFolder?.isConnected) {
-          parentFolder.tabs[0].after(childFolder);
-        }
         if (remainingTabs.length) {
           remainingTabs.forEach((t) => {
             try { if (!t.pinned) gBrowser.pinTab(t); } catch {}
@@ -3001,6 +3061,7 @@
                   tabsForThisTopic,
                   groupOptions
                 );
+                processTabGroup(newGroup);
                 upsertContainerByLabel(
                   existingContainersByLabel,
                   topic,
@@ -3615,6 +3676,7 @@
           treeConnectors.init();
           addTabEventListeners();
           scheduleFaviconRefresh();
+          processExistingTabGroups();
 
           return true;
         }

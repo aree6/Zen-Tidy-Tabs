@@ -122,6 +122,10 @@ tab-group:not(zen-folder) > .tab-group-label-container {
   padding: 10px 12px 4px !important;
   margin: 4px 0 0 !important;
   position: relative;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  min-height: 28px;
 }
 
 /* Subtle 1px divider above the label acts as a quiet section break. */
@@ -164,26 +168,6 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   border: none !important;
 }
 
-/* --- Favicon-tinted group/folder background for visual separation ------ */
-/* Uses the first child tab's favicon color as a subtle solid tint on    */
-/* the entire group/folder parent.                                       */
-
-zen-folder,
-tab-group:not(zen-folder) {
-  position: relative;
-}
-
-zen-folder::after,
-tab-group:not(zen-folder)::after {
-  content: "";
-  position: absolute;
-  inset: 2px 6px;
-  border-radius: var(--zen-border-radius, 10px);
-  background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 0.5%, transparent);
-  pointer-events: none;
-  z-index: -1;
-  transition: background 0.3s ease;
-}
 /* --- Sort-in-progress pulse ------------------------------------------- */
 /* While the script is sorting, tabs gently dim and breathe. The effect
    is ambient — not distracting — so we keep the opacity band tight
