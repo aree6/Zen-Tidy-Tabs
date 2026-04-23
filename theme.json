@@ -1,7 +1,7 @@
 {
   "id": "zen-tidy-tabs",
   "name": "Zen Tidy Tabs",
-  "description": "Sort your tabs using Firefox's local AI but make it look awesome!",
+  "description": "Smart tab sorting for Zen: OpenRouter, local AI, or deterministic fuzzy grouping with polished sidebar UX.",
   "scripts": {
     "tidy-tabs.uc.js": {
       "include": [

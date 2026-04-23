@@ -91,3 +91,111 @@
     display: none !important;
   }
 }
+
+/* --- Sidebar context-menu (Tidy Tabs) ---------------------------------- */
+/* Icons are set via the XUL `image` attribute in JS (most reliable path).
+   We only constrain the rendered size here so the SVG doesn't balloon. */
+menuitem.tidy-tabs-menuitem > .menu-iconic-left > .menu-iconic-icon,
+menuitem.tidy-tabs-menuitem .menu-iconic-icon {
+  width: 16px !important;
+  height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+  margin-inline-end: 6px;
+  opacity: 0.9;
+}
+
+/* --- Minimal (but refined) tab-group styling --------------------------- */
+/* Folders (zen-folder) keep their native look. Regular tab-group is
+   flattened: label becomes a quiet section header with a subtle divider,
+   no colored accent bar, no chip background. */
+tab-group:not(zen-folder) {
+  --tab-group-color: transparent !important;
+  --tab-group-color-invert: transparent !important;
+  --tab-group-color-pale: transparent !important;
+}
+
+tab-group:not(zen-folder) > .tab-group-label-container {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 10px 12px 4px !important;
+  margin: 4px 0 0 !important;
+  position: relative;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  min-height: 28px;
+}
+
+/* Subtle 1px divider above the label acts as a quiet section break. */
+/* tab-group:not(zen-folder) > .tab-group-label-container::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 0;
+  height: 1px;
+  background: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.06));
+  pointer-events: none;
+} */
+
+/* No stray right-side decorations. */
+tab-group:not(zen-folder) > .tab-group-label-container::after {
+  display: none !important;
+}
+
+tab-group:not(zen-folder) .tab-group-label {
+  color: var(--sidebar-text-color, var(--toolbar-color)) !important;
+  opacity: 0.65 !important;
+  font-weight: 600 !important;
+  font-size: 0.72em !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+tab-group:not(zen-folder) .tab-group-label-container:hover .tab-group-label {
+  opacity: 0.9 !important;
+}
+
+/* Kill the vertical colored bar that normally marks group children. */
+tab-group:not(zen-folder) > .tabbrowser-tab::before,
+tab-group:not(zen-folder) > .tab-group-container::before,
+tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
+  display: none !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+/* --- Sort-in-progress pulse ------------------------------------------- */
+/* While the script is sorting, tabs gently dim and breathe. The effect
+   is ambient — not distracting — so we keep the opacity band tight
+   (1 → 0.62) and let easing do the “life-like” motion. */
+@keyframes tidy-tabs-sort-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.62; }
+}
+
+:root.tidy-tabs-sorting .tabbrowser-tab,
+:root.tidy-tabs-sorting tab-group > .tab-group-label-container,
+:root.tidy-tabs-sorting zen-folder > .tab-group-label-container {
+  animation: tidy-tabs-sort-pulse 1.2s infinite cubic-bezier(0.3, 0, 0.2, 1.4);
+  will-change: opacity;
+}
+
+/* Respect reduced-motion preferences — just dim without the pulse. */
+@media (prefers-reduced-motion: reduce) {
+  :root.tidy-tabs-sorting .tabbrowser-tab,
+  :root.tidy-tabs-sorting tab-group > .tab-group-label-container,
+  :root.tidy-tabs-sorting zen-folder > .tab-group-label-container {
+    animation: none;
+    opacity: 0.7;
+    transition: opacity 0.2s ease-out;
+  }
+}
+
+/* Menu icons: stroke color is baked into the SVG source by JS because
+   data: URI SVGs rendered through XUL `image` attrs do NOT inherit
+   currentColor or honor -moz-context-properties. See `getMenuIconStroke`
+   in tidy-tabs.uc.js. */
