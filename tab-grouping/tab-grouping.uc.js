@@ -52,6 +52,12 @@
     // Optional comma/newline-separated host list that should stay loose
     // (never auto-grouped), e.g. "mail.google.com, calendar.google.com".
     PROTECTED_HOSTS: "",
+    // Tint pinned tab backgrounds using the favicon's dominant color at 10%
+    // opacity — adds a subtle contextual color cue to each pinned tab.
+    ENABLE_PINNED_TAB_FAVICON_BG: true,
+    // Tint group/folder backgrounds from the first tab's favicon. Once set
+    // the color is frozen — reordering tabs inside the group won't change it.
+    ENABLE_GROUP_FAVICON_BG: true,
   };
 
   const hasMeaningfulTitleSignal = (title) => {
@@ -84,13 +90,11 @@
     };
   };
 
-  // Return the user-selected engine from the dropdown. If the selected
-  // engine is unavailable (e.g. "local" but browser.ml.enabled is off,
-  // or "openrouter" but no API key), returns "none" so the caller can
-  // surface a clear failure. Hybrid is always considered available because
-  // it contains its own fallback chain.
-  // Root preferences.json saves the engine choice at zen.tidytabs.ai.group-namer.
-  // Values are either "local" or an OpenRouter model slug (e.g. "ling-flash").
+  // Return the user-selected engine from the dropdown.
+  // The unified dropdown saves to zen.tidytabs.ai.group-namer;
+  // values are "none", "local", or an OpenRouter model slug.
+  // "none" disables grouping. "local" needs browser.ml.enabled.
+  // OpenRouter needs a valid model slug + API key.
   const getSelectedEngine = () => {
     const choice = (CONFIG.GROUPING_ENGINE || "").trim().toLowerCase();
     if (choice === "local") return isAIEnabled() ? "local-ai" : "none";
@@ -125,6 +129,8 @@
     OPENROUTER_MODEL: ["string", "openrouter.model"],
     OPENROUTER_API_KEY: ["string", "openrouter.api-key"],
     PROTECTED_HOSTS: ["string", "behavior.protected-hosts"],
+    ENABLE_PINNED_TAB_FAVICON_BG: ["bool", "ui.enable-pinned-favicon-bg"],
+    ENABLE_GROUP_FAVICON_BG: ["bool", "ui.enable-group-favicon-bg"],
   };
 
   const services =
@@ -1015,32 +1021,104 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
     if (!window.gBrowser) return;
     const groups = document.querySelectorAll(GROUP_NODE_SELECTOR);
     for (const group of groups) {
-      const firstTab = group.querySelector(".tabbrowser-tab");
-      if (!firstTab) {
-        if (group._tidyFaviconUrl) {
+      if (!CONFIG.ENABLE_GROUP_FAVICON_BG) {
+        if (group._tidyFaviconColor) {
           group.style.removeProperty("--tidy-tabs-favicon-color");
           group._tidyFaviconUrl = null;
+          group._tidyFaviconColor = null;
         }
         continue;
       }
+      // Color is frozen once sampled — reordering tabs won't change it.
+      if (group._tidyFaviconColor) continue;
+      const firstTab = group.querySelector(".tabbrowser-tab");
+      if (!firstTab) continue;
       const iconImage = firstTab.querySelector(".tab-icon-image");
       const iconUrl = iconImage?.src;
-      if (!iconUrl) {
-        if (group._tidyFaviconUrl) {
-          group.style.removeProperty("--tidy-tabs-favicon-color");
-          group._tidyFaviconUrl = null;
-        }
-        continue;
-      }
-      if (group._tidyFaviconUrl === iconUrl) continue;
+      if (!iconUrl) continue;
       group._tidyFaviconUrl = iconUrl;
       const color = await sampleFaviconColor(iconUrl);
       if (color) {
+        group._tidyFaviconColor = color;
         group.style.setProperty("--tidy-tabs-favicon-color", color);
-      } else {
-        group.style.removeProperty("--tidy-tabs-favicon-color");
       }
     }
+  };
+
+  const refreshPinnedTabFaviconColors = async () => {
+    if (!window.gBrowser) return;
+    const pinnedTabs = document.querySelectorAll(".tabbrowser-tab[pinned]");
+    for (const tab of pinnedTabs) {
+      if (!CONFIG.ENABLE_PINNED_TAB_FAVICON_BG) {
+        if (tab._tidyPinnedFaviconUrl) {
+          tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
+          tab._tidyPinnedFaviconUrl = null;
+        }
+        continue;
+      }
+      const iconImage = tab.querySelector(".tab-icon-image");
+      const iconUrl = iconImage?.src;
+      if (!iconUrl) {
+        if (tab._tidyPinnedFaviconUrl) {
+          tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
+          tab._tidyPinnedFaviconUrl = null;
+        }
+        continue;
+      }
+      if (tab._tidyPinnedFaviconUrl === iconUrl) continue;
+      tab._tidyPinnedFaviconUrl = iconUrl;
+      const color = await sampleFaviconColor(iconUrl);
+      if (color) {
+        tab.style.setProperty("--tidy-tabs-pinned-favicon-color", color);
+      } else {
+        tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
+      }
+    }
+  };
+
+  const PINNED_TAB_FAVICON_CSS = `
+    .tabbrowser-tab[pinned] .tab-background {
+      background-color: color-mix(in srgb, var(--tidy-tabs-pinned-favicon-color, transparent) 10%, transparent) !important;
+      transition: background-color 0.2s ease;
+    }
+  `;
+
+  const GROUP_FAVICON_CSS = `
+    /* Scoped to each specific group/folder - only tint the label container */
+    zen-folder > .tab-group-label-container {
+      background-color: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 10%, transparent) !important;
+      transition: background-color 0.2s ease;
+    }
+    tab-group > .tab-group-label-container {
+      background-color: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 10%, transparent) !important;
+      transition: background-color 0.2s ease;
+    }
+  `;
+
+  const ensurePinnedTabFaviconStyles = () => {
+    const styleId = "tidy-tabs-pinned-favicon-style";
+    const existingStyle = document.getElementById(styleId);
+    if (existingStyle) {
+      existingStyle.textContent = PINNED_TAB_FAVICON_CSS;
+      return;
+    }
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = PINNED_TAB_FAVICON_CSS;
+    document.documentElement.appendChild(style);
+  };
+
+  const ensureGroupFaviconStyles = () => {
+    const styleId = "tidy-tabs-group-favicon-style";
+    const existingStyle = document.getElementById(styleId);
+    if (existingStyle) {
+      existingStyle.textContent = GROUP_FAVICON_CSS;
+      return;
+    }
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = GROUP_FAVICON_CSS;
+    document.documentElement.appendChild(style);
   };
 
   const scheduleFaviconRefresh = () => {
@@ -1053,6 +1131,7 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
       try {
         faviconRefreshPending = false;
         await refreshGroupFaviconColors();
+        await refreshPinnedTabFaviconColors();
       } finally {
         faviconRefreshInFlight = false;
         if (faviconRefreshPending) {
@@ -3013,7 +3092,13 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
       return;
     }
 
-    tabContainerEventHandler = () => {
+    tabContainerEventHandler = (event) => {
+      if (CONFIG.ENABLE_PINNED_TAB_FAVICON_BG) {
+        const triggerEvents = new Set(["TabOpen", "TabPinned", "TabUnpinned", "TabAttrModified"]);
+        if (event && triggerEvents.has(event.type)) {
+          scheduleFaviconRefresh();
+        }
+      }
     };
 
     TAB_CONTAINER_EVENTS.forEach((eventName) => {
@@ -3128,6 +3213,9 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
           patchClearButtonToPreserveGroups();
           addTabEventListeners();
           processExistingTabGroups();
+          ensurePinnedTabFaviconStyles();
+          ensureGroupFaviconStyles();
+          scheduleFaviconRefresh();
 
           return true;
         }

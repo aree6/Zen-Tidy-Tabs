@@ -1,105 +1,92 @@
 [
     {
-      "property": "zen.tabgrouping.grouping-strength",
-      "label": "Grouping strength",
+      "property": "zen.tidytabs.grouping-strength",
+      "label": "Grouping strength — 0 = conservative, 1 = aggressive",
       "type": "string",
       "disabledOn": [],
       "defaultValue": "0.5"
     },
     {
-      "property": "zen.tabgrouping.group-leftovers-as-misc",
+      "property": "zen.tidytabs.group-leftovers-as-misc",
       "label": "Group leftover tabs as Miscellaneous",
       "type": "checkbox",
       "disabledOn": [],
       "defaultValue": true
     },
     {
-      "property": "zen.tabgrouping.grouping-engine",
+      "property": "zen.tidytabs.ai.group-namer",
       "label": "Grouping engine",
       "type": "dropdown",
       "disabledOn": [],
-      "defaultValue": "hybrid",
+      "defaultValue": "local",
       "options": [
-        {
-          "label": "Hybrid (OpenRouter → Local AI → Fuzzy)",
-          "value": "hybrid"
-        },
-        {
-          "label": "OpenRouter",
-          "value": "openrouter"
-        },
-        {
-          "label": "Local AI (on-device)",
-          "value": "local"
-        },
-        {
-          "label": "Fuzzy",
-          "value": "fuzzy"
-        }
+        { "label": "None (disable grouping)", "value": "none" },
+        { "label": "Local — Firefox ML (default, offline)", "value": "local" },
+        { "label": "OpenRouter — Ling-2.6 Flash (fastest)", "value": "ling-flash" },
+        { "label": "OpenRouter — Llama 3.3 70B (most accurate)", "value": "llama33-70b" },
+        { "label": "OpenRouter — Gemma 3 27B (balanced)", "value": "gemma3-27b" },
+        { "label": "OpenRouter — GLM 4.5 Air (balanced)", "value": "glm-air" }
       ]
     },
     {
-      "property": "zen.tabgrouping.openrouter.model",
-      "label": "OpenRouter model",
-      "type": "dropdown",
-      "disabledOn": [],
-      "defaultValue": "ling-flash",
-      "options": [
-        {
-          "label": "ling-flash",
-          "value": "ling-flash"
-        },
-        {
-          "label": "glm-air",
-          "value": "glm-air"
-        }
-      ]
-    },
-    {
-      "property": "zen.tabgrouping.openrouter.api-key",
+      "property": "zen.tidytabs.openrouter.api-key",
       "label": "OpenRouter API key",
       "type": "string",
       "disabledOn": [],
       "defaultValue": ""
     },
     {
-      "property": "zen.tabgrouping.behavior.protected-hosts",
+      "property": "zen.tidytabs.behavior.protected-hosts",
       "label": "Protected hosts (never auto-grouped)",
       "type": "string",
       "disabledOn": [],
       "defaultValue": ""
     },
     {
-      "property": "zen.tabgrouping.behavior.patch-clear-button",
+      "property": "zen.tidytabs.behavior.patch-clear-button",
       "label": "Patch clear button to protect grouped tabs",
       "type": "checkbox",
       "disabledOn": [],
       "defaultValue": true
     },
     {
-      "property": "zen.tabgrouping.ui.enable-failure-animation",
+      "property": "zen.tidytabs.ui.enable-failure-animation",
       "label": "Enable failure shake animation",
       "type": "checkbox",
       "disabledOn": [],
       "defaultValue": true
     },
     {
-      "property": "zen.tabgrouping.ui.enable-success-animation",
+      "property": "zen.tidytabs.ui.enable-success-animation",
       "label": "Enable success pulse animation",
       "type": "checkbox",
       "disabledOn": [],
       "defaultValue": true
     },
     {
-      "property": "zen.tabgrouping.menu.sort-groups",
+      "property": "zen.tidytabs.menu.sort-groups",
       "label": "Show 'Sort into Tab Groups' menu item",
       "type": "checkbox",
       "disabledOn": [],
       "defaultValue": true
     },
     {
-      "property": "zen.tabgrouping.menu.sort-folders",
+      "property": "zen.tidytabs.menu.sort-folders",
       "label": "Show 'Sort into Folders' menu item",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": true
+    },
+    {
+      "property": "zen.tidytabs.ui.enable-pinned-favicon-bg",
+      "label": "Tint pinned tab backgrounds from favicon color",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": true
+    },
+    {
+      "property": "zen.tidytabs.ui.enable-group-favicon-bg",
+      "label": "Tint group/folder backgrounds from first tab's favicon (frozen once set)",
       "type": "checkbox",
       "disabledOn": [],
       "defaultValue": true

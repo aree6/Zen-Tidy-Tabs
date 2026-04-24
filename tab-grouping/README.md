@@ -1,6 +1,6 @@
 # Zen Tab Grouping
 
-A standalone mod that sorts and groups your Zen Browser tabs by topic using either on-device AI embeddings or OpenRouter.
+Sorts and groups Zen Browser tabs by topic using local AI embeddings, OpenRouter, or deterministic fuzzy fallback.
 
 ## Features
 
@@ -10,6 +10,7 @@ A standalone mod that sorts and groups your Zen Browser tabs by topic using eith
 - **Success / failure animations** (configurable)
 - **Clear-button protection** so grouped tabs are not accidentally closed
 - **Context-menu actions** to sort into tab groups or folders
+- **Favicon tinting** for pinned tabs and groups
 
 ## Installation
 
@@ -17,20 +18,20 @@ Copy the `tab-grouping/` folder into your Zen Browser mods directory and enable 
 
 ## Preferences
 
-All preferences live under the `zen.tabgrouping.` branch.
-
 | Preference | Type | Default | Description |
 |------------|------|---------|-------------|
-| `grouping-strength` | string (0-1) | `0.5` | Aggressiveness of grouping |
-| `group-leftovers-as-misc` | checkbox | true | Bucket ungrouped tabs into "Miscellaneous" |
-| `ai.group-namer` | dropdown | `local` | Backend for topic naming |
-| `openrouter.api-key` | string | "" | OpenRouter API key |
-| `behavior.protected-hosts` | string | "" | Comma-separated hosts to never auto-group |
-| `behavior.patch-clear-button` | checkbox | true | Protect grouped tabs from clear-button |
-| `ui.enable-failure-animation` | checkbox | true | Shake on failure |
-| `ui.enable-success-animation` | checkbox | true | Pulse on success |
-| `menu.sort-groups` | checkbox | true | Show sort-into-groups menu item |
-| `menu.sort-folders` | checkbox | true | Show sort-into-folders menu item |
+| `zen.tidytabs.grouping-strength` | string (0-1) | `0.5` | Aggressiveness of grouping |
+| `zen.tidytabs.group-leftovers-as-misc` | checkbox | true | Bucket ungrouped tabs into "Miscellaneous" |
+| `zen.tidytabs.ai.group-namer` | dropdown | `local` | Backend engine |
+| `zen.tidytabs.openrouter.api-key` | string | "" | OpenRouter API key |
+| `zen.tidytabs.behavior.protected-hosts` | string | "" | Comma-separated hosts to never auto-group |
+| `zen.tidytabs.behavior.patch-clear-button` | checkbox | true | Protect grouped tabs from clear-button |
+| `zen.tidytabs.ui.enable-failure-animation` | checkbox | true | Shake on failure |
+| `zen.tidytabs.ui.enable-success-animation` | checkbox | true | Pulse on success |
+| `zen.tidytabs.menu.sort-groups` | checkbox | true | Show sort-into-groups menu item |
+| `zen.tidytabs.menu.sort-folders` | checkbox | true | Show sort-into-folders menu item |
+| `zen.tidytabs.ui.enable-pinned-favicon-bg` | checkbox | true | Tint pinned tabs from favicon |
+| `zen.tidytabs.ui.enable-group-favicon-bg` | checkbox | true | Tint groups from first tab's favicon |
 
 ## Standalone
 
