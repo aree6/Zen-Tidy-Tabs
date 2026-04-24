@@ -595,7 +595,7 @@
         // Output is bounded roughly by (groups * ~30 chars) + tab numbers;
         // 1024 is comfortable headroom for ~100 tabs across ~20 groups.
         max_tokens: 1024,
-        temperature: 0.2,
+        temperature: 0.4,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
