@@ -1035,10 +1035,42 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   };
 
   const getTabIconUrl = (tab) => {
+    // Most reliable: Firefox tabbrowser API (works for all tab types)
+    try {
+      if (window.gBrowser?.getIcon) {
+        const icon = gBrowser.getIcon(tab);
+        if (icon) {
+          console.log("[TidyTabs] gBrowser.getIcon =>", icon.substring(0, 60));
+          return icon;
+        }
+      }
+    } catch (e) {
+      console.log("[TidyTabs] gBrowser.getIcon threw:", e?.message);
+    }
+    // Fallback 1: XUL tab "image" attribute (set by tabbrowser)
     const tabImage = tab.getAttribute?.("image");
-    if (tabImage) return tabImage;
+    if (tabImage) {
+      console.log("[TidyTabs] tab.image attr =>", tabImage.substring(0, 60));
+      return tabImage;
+    }
+    // Fallback 2: inner html:img src attribute
     const iconImage = tab.querySelector(".tab-icon-image");
-    return iconImage?.getAttribute?.("src") || null;
+    const src = iconImage?.getAttribute?.("src");
+    if (src) {
+      console.log("[TidyTabs] .tab-icon-image src =>", src.substring(0, 60));
+      return src;
+    }
+    // Fallback 3: list-style-image CSS property on the icon element
+    const listImage = iconImage?.style?.listStyleImage;
+    if (listImage && listImage !== "none") {
+      const match = listImage.match(/url\("?(.+?)"?\)/);
+      if (match) {
+        console.log("[TidyTabs] list-style-image =>", match[1].substring(0, 60));
+        return match[1];
+      }
+    }
+    console.log("[TidyTabs] No icon found for tab", tab?.label);
+    return null;
   };
 
   const refreshGroupFaviconColors = async () => {
