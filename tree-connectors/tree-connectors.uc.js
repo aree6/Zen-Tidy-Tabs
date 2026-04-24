@@ -482,38 +482,21 @@
         isExpanded && isVisible
           ? this.getVisibleChildren(group, isCollapsed)
           : [];
-      const splitTabs =
-        isExpanded && isVisible
-          ? this.getSplitViewTabs(group)
-          : [];
 
       let connector = container.querySelector(":scope > .tree-connector");
       if (!children.length) {
         if (connector) connector.hidden = true;
-      } else {
-        if (!connector) {
-          connector = document.createElement("div");
-          connector.className = "tree-connector";
-          container.prepend(connector);
-        }
-        connector.hidden = false;
-        this.performSVGUpdate(connector, children, false);
+        return;
       }
 
-      let splitConnector = container.querySelector(":scope > .tree-connector-split");
-      if (!splitTabs.length) {
-        if (splitConnector) splitConnector.hidden = true;
-      } else {
-        if (!splitConnector) {
-          splitConnector = document.createElement("div");
-          splitConnector.className = "tree-connector-split";
-          splitConnector.style.cssText =
-            "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;";
-          container.prepend(splitConnector);
-        }
-        splitConnector.hidden = false;
-        this.performSplitTabSVGUpdate(splitConnector, splitTabs);
+      if (!connector) {
+        connector = document.createElement("div");
+        connector.className = "tree-connector";
+        container.prepend(connector);
       }
+      connector.hidden = false;
+
+      this.performSVGUpdate(connector, children, false);
     }
 
     refreshVisualRelationships() {
@@ -624,12 +607,6 @@
         if (item.offsetHeight <= 0) return;
 
         if (window.gBrowser.isTabGroup(item)) {
-          if (item.hasAttribute("split-view-group")) {
-            // Skip split-view groups from normal tree rendering —
-            // they get their own C-curve connectors separately.
-            return;
-          }
-
           if (item.isZenFolder) {
             const rootMost = item.rootMostCollapsedFolder;
             if (isParentCollapsed || (rootMost && rootMost !== item)) {
@@ -654,27 +631,6 @@
       return result;
     }
 
-    getSplitViewTabs(host) {
-      if (!host) return [];
-      let items = null;
-      if (Array.isArray(host.allItems) || host.allItems?.length >= 0) {
-        items = host.allItems;
-      }
-      if (!items || !items.length) {
-        const container = host.querySelector(":scope > .tab-group-container");
-        items = container ? Array.from(container.children) : [];
-      }
-      if (!items.length) return [];
-
-      return items.filter((item) => {
-        if (item.offsetHeight <= 0) return false;
-        return (
-          window.gBrowser.isTabGroup(item) &&
-          item.hasAttribute("split-view-group")
-        );
-      });
-    }
-
     refreshFolderConnector(folder) {
       const container = folder.querySelector(":scope > .tab-group-container");
       if (!container) return;
@@ -686,8 +642,6 @@
           ghost.hidden = true;
           delete ghost._cachedPathElement;
         }
-        const splitGhost = container.querySelector(":scope > .tree-connector-split");
-        if (splitGhost) splitGhost.hidden = true;
         return;
       }
 
@@ -702,8 +656,6 @@
           connector.hidden = true;
           delete connector._cachedPathElement;
         }
-        const splitConnector = container.querySelector(":scope > .tree-connector-split");
-        if (splitConnector) splitConnector.hidden = true;
         return;
       }
 
@@ -717,38 +669,21 @@
         isExpanded && isVisible
           ? this.getVisibleChildren(folder, isCollapsed)
           : [];
-      const splitTabs =
-        isExpanded && isVisible
-          ? this.getSplitViewTabs(folder)
-          : [];
 
       let connector = container.querySelector(":scope > .tree-connector");
       if (!children.length) {
         if (connector) connector.hidden = true;
-      } else {
-        if (!connector) {
-          connector = document.createElement("div");
-          connector.className = "tree-connector";
-          container.prepend(connector);
-        }
-        connector.hidden = false;
-        this.performSVGUpdate(connector, children, false);
+        return;
       }
 
-      let splitConnector = container.querySelector(":scope > .tree-connector-split");
-      if (!splitTabs.length) {
-        if (splitConnector) splitConnector.hidden = true;
-      } else {
-        if (!splitConnector) {
-          splitConnector = document.createElement("div");
-          splitConnector.className = "tree-connector-split";
-          splitConnector.style.cssText =
-            "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;";
-          container.prepend(splitConnector);
-        }
-        splitConnector.hidden = false;
-        this.performSplitTabSVGUpdate(splitConnector, splitTabs);
+      if (!connector) {
+        connector = document.createElement("div");
+        connector.className = "tree-connector";
+        container.prepend(connector);
       }
+      connector.hidden = false;
+
+      this.performSVGUpdate(connector, children, false);
     }
 
     refreshRelatedTabConnector(parent) {
@@ -828,10 +763,16 @@
             y += targetElement.offsetHeight / 2;
           }
 
+          const isSplit =
+            !isRelated &&
+            window.gBrowser.isTabGroup(item) &&
+            item.hasAttribute("split-view-group");
+
           return {
             y,
             x,
             r: Math.min(CONFIG.TREE_BRANCH_RADIUS, Math.max(0, x - CONFIG.TREE_LINE_X)),
+            isSplit,
           };
         })
         .filter((point) => point.y > 1);
@@ -847,8 +788,19 @@
 
       const pathStart = isRelated && contextTab ? contextTab.offsetHeight / 2 : 0;
       let pathData = `M ${CONFIG.TREE_LINE_X} ${pathStart} L ${CONFIG.TREE_LINE_X} ${trunkTerminateY}`;
-      points.forEach(({ y, x, r }) => {
-        pathData += ` M ${CONFIG.TREE_LINE_X} ${y - r} A ${r} ${r} 0 0 0 ${CONFIG.TREE_LINE_X + r} ${y} L ${x} ${y}`;
+      points.forEach(({ y, x, r, isSplit }) => {
+        if (isSplit) {
+          // Smooth ⊂-style C-curve for split-view tabs: a gentle cubic bezier
+          // that bulges left like a subset symbol opening to the right.
+          const depth = Math.max(4, Math.min(r, 7));
+          const height = depth * 0.6;
+          pathData += ` M ${CONFIG.TREE_LINE_X} ${y}` +
+            ` C ${CONFIG.TREE_LINE_X - depth} ${y - height}` +
+            `, ${x - depth} ${y - height}` +
+            `, ${x} ${y}`;
+        } else {
+          pathData += ` M ${CONFIG.TREE_LINE_X} ${y - r} A ${r} ${r} 0 0 0 ${CONFIG.TREE_LINE_X + r} ${y} L ${x} ${y}`;
+        }
       });
 
       let path = host._cachedPathElement;
@@ -881,89 +833,6 @@
       }
     }
 
-    performSplitTabSVGUpdate(host, splitTabs) {
-      const baseRect = this.windowUtils.getBoundsWithoutFlushing(host);
-      const curves = splitTabs
-        .map((item) => {
-          const itemRect = this.windowUtils.getBoundsWithoutFlushing(item);
-
-          let tx = 0;
-          let ty = 0;
-          const inlineTransform = item.style.transform;
-          const transformValue =
-            inlineTransform && inlineTransform !== "none" ? inlineTransform : null;
-
-          if (transformValue) {
-            const matrix = new window.DOMMatrix(transformValue);
-            tx = matrix.m41;
-            ty = matrix.m42;
-          } else if (!inlineTransform) {
-            const computed = window.getComputedStyle(item).transform;
-            if (computed && computed !== "none") {
-              const matrix = new window.DOMMatrix(computed);
-              tx = matrix.m41;
-              ty = matrix.m42;
-            }
-          }
-
-          const x = itemRect.left - tx - baseRect.left + CONFIG.TREE_BRANCH_OVERSHOOT;
-          const y = itemRect.top - ty - baseRect.top + item.offsetHeight / 2;
-
-          return { x, y };
-        })
-        .filter((p) => p.y > 1);
-
-      if (!curves.length) {
-        host.hidden = true;
-        return;
-      }
-
-      // C-curve depth: symmetric like U but narrow like C.
-      const curveDepth = Math.max(3, Math.min(CONFIG.TREE_BRANCH_RADIUS - 1, 5));
-      const curveHeight = curveDepth * 0.8;
-
-      let pathData = "";
-      curves.forEach(({ x, y }) => {
-        const startX = CONFIG.TREE_LINE_X;
-        // Cubic bezier creating a smooth C-shaped arc from the trunk line
-        // to the split tab. Control points are symmetric and offset by
-        // curveDepth horizontally, giving a narrow arc (C-like, not U-like).
-        const cp1x = startX + curveDepth;
-        const cp1y = y - curveHeight;
-        const cp2x = x - curveDepth;
-        const cp2y = y - curveHeight;
-        pathData += ` M ${startX} ${y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x} ${y}`;
-      });
-
-      let path = host._cachedPathElement;
-      if (!path) {
-        path = document.createElementNS(this.SVG_NS, "path");
-        const svg = document.createElementNS(this.SVG_NS, "svg");
-        svg.setAttribute("width", "100%");
-        svg.setAttribute("height", "100%");
-        svg.style.position = "absolute";
-        svg.style.top = "0";
-        svg.style.left = "0";
-        svg.style.overflow = "visible";
-        svg.style.pointerEvents = "none";
-
-        const group = document.createElementNS(this.SVG_NS, "g");
-        group.setAttribute("opacity", `${CONFIG.TREE_OPACITY}`);
-        group.setAttribute("stroke", "currentColor");
-        group.setAttribute("stroke-width", `${CONFIG.TREE_STROKE_WIDTH}`);
-        group.setAttribute("fill", "none");
-        group.setAttribute("stroke-linecap", "round");
-
-        group.appendChild(path);
-        svg.appendChild(group);
-        host.replaceChildren(svg);
-        host._cachedPathElement = path;
-      }
-
-      if (path.getAttribute("d") !== pathData) {
-        path.setAttribute("d", pathData);
-      }
-    }
   }
 
   // Auto-init
