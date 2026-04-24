@@ -62,14 +62,7 @@
     },
     {
       "property": "zen.tidytabs.ui.enable-failure-animation",
-      "label": "Enable failure shake animation",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.tidytabs.ui.enable-success-animation",
-      "label": "Enable success pulse animation",
+      "label": "Show 'Sort into Tab Groups' menu item",
       "type": "checkbox",
       "disabledOn": [],
       "defaultValue": true

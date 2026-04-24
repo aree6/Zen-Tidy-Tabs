@@ -584,7 +584,7 @@ Naming rules (CRITICAL):
 
 Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 - Each key is a group name. Each value is an array of 1-based tab numbers.
-- Minimum 2 tabs per group. Never return empty arrays.
+- Each group should have atlest 2 tabs (Important).
 - Return ONLY raw JSON. No markdown code fences, no prose, no explanations.`;
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
@@ -1038,6 +1038,8 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   const refreshGroupFaviconColors = async () => {
     if (!window.gBrowser) return;
     const groups = document.querySelectorAll(GROUP_NODE_SELECTOR);
+    if (!groups.length) return;
+    let changed = 0;
     for (const group of groups) {
       if (!CONFIG.ENABLE_GROUP_FAVICON_BG) {
         if (group._tidyFaviconColor) {
@@ -1059,13 +1061,16 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       if (color) {
         group._tidyFaviconColor = color;
         group.style.setProperty("--tidy-tabs-favicon-color", color);
+        changed++;
       }
     }
+    if (changed) console.log(`[TidyTabs] Set favicon bg on ${changed} group(s)/folder(s)`);
   };
 
   const refreshPinnedTabFaviconColors = async () => {
     if (!window.gBrowser) return;
-    const pinnedTabs = document.querySelectorAll(".tabbrowser-tab[pinned]");
+    const pinnedTabs = document.querySelectorAll('.tabbrowser-tab[pinned="true"]');
+    let changed = 0;
     for (const tab of pinnedTabs) {
       if (!CONFIG.ENABLE_PINNED_TAB_FAVICON_BG) {
         if (tab._tidyPinnedFaviconUrl) {
@@ -1088,28 +1093,32 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       const color = await sampleFaviconColor(iconUrl);
       if (color) {
         tab.style.setProperty("--tidy-tabs-pinned-favicon-color", color);
+        changed++;
       } else {
         tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
       }
     }
+    if (changed) console.log(`[TidyTabs] Set favicon bg on ${changed} pinned tab(s)`);
   };
 
   const PINNED_TAB_FAVICON_CSS = `
-    .tabbrowser-tab[pinned] .tab-background {
-      background-color: color-mix(in srgb, var(--tidy-tabs-pinned-favicon-color, transparent) 10%, transparent) !important;
-      transition: background-color 0.2s ease;
+    /* Use higher specificity to beat Zen native tab-background styles */
+    #tabbrowser-tabs .tabbrowser-tab[pinned="true"] .tab-background,
+    .zen-workspace-pinned-tabs-section .tabbrowser-tab[pinned="true"] .tab-background {
+      background: color-mix(in srgb, var(--tidy-tabs-pinned-favicon-color, transparent) 15%, transparent) !important;
+      transition: background 0.2s ease;
     }
   `;
 
   const GROUP_FAVICON_CSS = `
-    /* Scoped to each specific group/folder - only tint the label container */
+    /* Match userChrome.css specificity (0,1,2) and use background shorthand */
     zen-folder > .tab-group-label-container {
-      background-color: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 10%, transparent) !important;
-      transition: background-color 0.2s ease;
+      background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 15%, transparent) !important;
+      transition: background 0.2s ease;
     }
-    tab-group > .tab-group-label-container {
-      background-color: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 10%, transparent) !important;
-      transition: background-color 0.2s ease;
+    tab-group:not(zen-folder) > .tab-group-label-container {
+      background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 15%, transparent) !important;
+      transition: background 0.2s ease;
     }
   `;
 
@@ -1124,6 +1133,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     style.id = styleId;
     style.textContent = PINNED_TAB_FAVICON_CSS;
     document.documentElement.appendChild(style);
+    console.log("[TidyTabs] Injected pinned-tab favicon styles");
   };
 
   const ensureGroupFaviconStyles = () => {
@@ -1137,6 +1147,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     style.id = styleId;
     style.textContent = GROUP_FAVICON_CSS;
     document.documentElement.appendChild(style);
+    console.log("[TidyTabs] Injected group/folder favicon styles");
   };
 
   const scheduleFaviconRefresh = () => {
@@ -1148,6 +1159,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       faviconRefreshInFlight = true;
       try {
         faviconRefreshPending = false;
+        console.log("[TidyTabs] Running favicon refresh...");
         await refreshGroupFaviconColors();
         await refreshPinnedTabFaviconColors();
       } finally {
@@ -3136,11 +3148,13 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     }
 
     tabContainerEventHandler = (event) => {
-      if (CONFIG.ENABLE_PINNED_TAB_FAVICON_BG) {
-        const triggerEvents = new Set(["TabOpen", "TabPinned", "TabUnpinned", "TabAttrModified"]);
-        if (event && triggerEvents.has(event.type)) {
-          scheduleFaviconRefresh();
-        }
+      const triggerEvents = new Set([
+        "TabOpen", "TabClose", "TabPinned", "TabUnpinned",
+        "TabAttrModified", "TabMove",
+        "TabGroupAdd", "TabGroupRemove", "TabGrouped", "TabUngrouped"
+      ]);
+      if (event && triggerEvents.has(event.type)) {
+        scheduleFaviconRefresh();
       }
     };
 
