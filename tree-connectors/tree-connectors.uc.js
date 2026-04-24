@@ -9,9 +9,6 @@
     MAX_INIT_CHECKS: 50,
     INIT_CHECK_INTERVAL: 100,
     TREE_CONNECTORS_ENABLED: true,
-    ENABLE_COLLAPSIBLE_GROUPS: true,
-    ENABLE_GROUP_DELETE: true,
-    ENABLE_GROUP_TO_FOLDER: true,
     TREE_INCLUDE_RELATED_TABS: true,
     TREE_REFRESH_ON_ANIMATIONS: true,
     TREE_LINE_X: 6,
@@ -28,9 +25,6 @@
 
   const PREFS = {
     TREE_CONNECTORS_ENABLED: ["bool", "enabled"],
-    ENABLE_COLLAPSIBLE_GROUPS: ["bool", "enable-collapsible-groups"],
-    ENABLE_GROUP_DELETE: ["bool", "enable-group-delete"],
-    ENABLE_GROUP_TO_FOLDER: ["bool", "enable-group-to-folder"],
     TREE_INCLUDE_RELATED_TABS: ["bool", "include-related-tabs"],
     TREE_REFRESH_ON_ANIMATIONS: ["bool", "refresh-on-animations"],
     TREE_LINE_X: ["int", "line-x"],
@@ -184,6 +178,7 @@
         const container = group.querySelector(":scope > .tab-group-container");
         if (!container) return;
         const isCollapsed = group.hasAttribute("collapsed");
+        const hasActive = group.hasAttribute("has-active");
         container.querySelectorAll(":scope > tab").forEach((tab) => {
           const isActive = tab.matches("[selected='true']") || tab.hasAttribute("selected");
           tab.hidden = isCollapsed && !isActive;
@@ -193,9 +188,6 @@
       };
 
       const toggleCollapse = (e) => {
-        // Check live pref value at click time
-        if (!isFeatureEnabled("enable-collapsible-groups")) return;
-
         if (e) {
           e.stopPropagation();
           e.preventDefault();
@@ -229,17 +221,6 @@
       syncTabVisibility();
     }
 
-    // Add context menu for group operations (delete, convert to folder)
-    // Always attach handler; showGroupContextMenu checks live pref values
-    if (!labelContainer._tidyContextMenuHandler) {
-      labelContainer.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showGroupContextMenu(group, e);
-      });
-      labelContainer._tidyContextMenuHandler = true;
-    }
-
     group.setAttribute("data-tidy-tabs-processed", "true");
   };
 
@@ -249,133 +230,12 @@
     );
     groups.forEach((group) => processTabGroup(group));
   };
-
-  // --- Group Context Menu ------------------------------------------------
-  // Check if a feature is enabled by reading the live pref value
-  const isFeatureEnabled = (prefSuffix) => {
-    return getPrefValue("bool", `${PREF_BRANCH}${prefSuffix}`, true);
-  };
-
-  // Show a context menu with group operations (delete, convert to folder)
-  const showGroupContextMenu = (group, event) => {
-    const enableDelete = isFeatureEnabled("enable-group-delete");
-    const enableFolder = isFeatureEnabled("enable-group-to-folder");
-
-    if (!enableDelete && !enableFolder) return;
-
-    const popup = document.createElement("menupopup");
-    popup.className = "tidy-tabs-group-context-menu";
-
-    // Delete Group: ungroup all tabs without closing them
-    if (enableDelete) {
-      const deleteItem = document.createElement("menuitem");
-      deleteItem.setAttribute("label", "Delete Group (Ungroup Tabs)");
-      deleteItem.addEventListener("command", () => deleteGroup(group));
-      popup.appendChild(deleteItem);
-    }
-
-    // Convert to Folder: turn this group into a zen-folder
-    if (enableFolder) {
-      const folderItem = document.createElement("menuitem");
-      folderItem.setAttribute("label", "Convert to Folder");
-      folderItem.addEventListener("command", () => convertGroupToFolder(group));
-      popup.appendChild(folderItem);
-    }
-
-    // Position and show the menu
-    document.documentElement.appendChild(popup);
-
-    popup.addEventListener("popuphidden", () => {
-      popup.remove();
-    }, { once: true });
-
-    popup.openPopupAtScreen(event.screenX, event.screenY, true);
-  };
-
-  // Delete a group: ungroup all tabs but keep them open
-  const deleteGroup = (group) => {
-    if (!group?.isConnected) return;
-
-    const container = group.querySelector(":scope > .tab-group-container");
-    if (!container) return;
-
-    const tabs = Array.from(container.querySelectorAll("tab")).filter(
-      (t) => t?.isConnected
-    );
-
-    // Move tabs out of the group before removing it
-    const workspace = group.closest("zen-workspace");
-    const insertBefore = group.nextElementSibling;
-
-    tabs.forEach((tab) => {
-      // Remove from group but keep in tab bar
-      tab.group = null;
-      tab.removeAttribute("group");
-    });
-
-    // Remove the group element
-    group.remove();
-
-    // Dispatch event so other mods can refresh
-    window.dispatchEvent(new CustomEvent("TabGroupRemoved", { bubbles: true }));
-
-    console.log(`[TidyTabs] Deleted group, ungrouped ${tabs.length} tabs`);
-  };
-
-  // Convert a tab group to a zen-folder
-  const convertGroupToFolder = (group) => {
-    if (!group?.isConnected) return;
-
-    const label = group.getAttribute("label") || "Folder";
-    const container = group.querySelector(":scope > .tab-group-container");
-    if (!container) return;
-
-    const tabs = Array.from(container.querySelectorAll("tab")).filter(
-      (t) => t?.isConnected
-    );
-
-    if (tabs.length === 0) {
-      group.remove();
-      return;
-    }
-
-    try {
-      // Create a new zen-folder
-      const folder = document.createElement("zen-folder");
-      folder.setAttribute("label", label);
-
-      // Move the folder into the tab bar where the group was
-      group.parentNode.insertBefore(folder, group);
-
-      // Move tabs from the group container to the folder
-      // We need to pin them since folders only hold pinned tabs
-      tabs.forEach((tab) => {
-        tab.group = null;
-        tab.removeAttribute("group");
-        // Add to folder - this triggers Zen's folder handling
-        folder.addItem(tab);
-      });
-
-      // Remove the old group
-      group.remove();
-
-      // Dispatch events
-      window.dispatchEvent(new CustomEvent("TabGroupRemoved", { bubbles: true }));
-      window.dispatchEvent(new CustomEvent("FolderGrouped", { bubbles: true }));
-
-      console.log(`[TidyTabs] Converted group "${label}" to folder with ${tabs.length} tabs`);
-    } catch (e) {
-      console.error("[TidyTabs] Failed to convert group to folder:", e);
-    }
-  };
-
   // --- Folder Tree Connectors ---
   const TREE_SCHEDULE_EVENTS = new Set([
     "TabGroupExpand",
     "TabGroupCollapse",
     "TabGrouped",
     "TabUngrouped",
-    "TabGroupRemoved",
     "FolderGrouped",
     "FolderUngrouped",
     "TabSelect",

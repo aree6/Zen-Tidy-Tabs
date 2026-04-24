@@ -16,11 +16,11 @@
   "preferences": "preferences.json",
   "readme": "https://raw.githubusercontent.com/aree6/Zen-Tidy-Tabs/main/tab-grouping/README.md",
   "author": "aree6",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "tags": ["tabs", "grouping", "ai", "sorting", "Zen Browser", "Tab Groups"],
   "createdAt": "2026-04-23",
-  "updatedAt": "2026-04-23",
-  "modules": ["Vertex-Mods/Advanced-Tab-Groups"],
+  "updatedAt": "2026-04-24",
+  "modules": [],
   "ai": "yes",
   "fork": ["zen"]
 }

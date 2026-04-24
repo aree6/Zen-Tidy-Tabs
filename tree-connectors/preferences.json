@@ -7,27 +7,6 @@
       "defaultValue": true
     },
     {
-      "property": "zen.treeconnectors.enable-collapsible-groups",
-      "label": "Enable collapsible tab groups (click group header to collapse/expand)",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.treeconnectors.enable-group-delete",
-      "label": "Enable 'Delete Group' context menu (ungroup tabs without closing them)",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.treeconnectors.enable-group-to-folder",
-      "label": "Enable 'Convert to Folder' context menu (convert group to zen-folder)",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
       "property": "zen.treeconnectors.include-related-tabs",
       "label": "Draw connectors for related (child) tabs",
       "type": "checkbox",
