@@ -34,6 +34,10 @@ This mod uses **Libre Baskerville** for the logo. You **must** install it manual
 *   **[OFF] Clean UI:** Hides the bookmarks toolbar and harsh borders.
 *   **[OFF] Pending Tab Status:** Adds a moon icon 🌙 and dims unloaded tabs.
 *   **[OFF] Essentials Grid:** Optimizes the layout of the essentials panel.
+*   **[OFF] Disable logo animation:** Uses a static logo on the start page instead of the animated one.
+*   **[OFF] Hide address bar on start page:** Removes the URL bar when viewing the start page.
+*   **[OFF] Stronger background fade gradient:** Doubles the width and intensity of the transparent fade-in gradient.
+*   **[OFF] Custom tab borders:** Adds configurable border color, width, and radius to tab backgrounds.
 
 
 

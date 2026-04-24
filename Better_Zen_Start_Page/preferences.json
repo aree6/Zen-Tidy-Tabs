@@ -1,32 +1,93 @@
 [
-  {
-    "property": "zen.fix.newtab",
-    "label": "Start Page Logo",
-    "type": "checkbox"
-  },
-  {
-    "property": "zen.fix.fade",
-    "label": "Fade In Transparent Background",
-    "type": "checkbox"
-  },
-  {
-    "property": "zen.fix.tabs",
-    "label": "Transparent Tabs & Dot Indicator",
-    "type": "checkbox"
-  },
-  {
-    "property": "zen.fix.pending",
-    "label": "Pending Tab Status",
-    "type": "checkbox"
-  },
-  {
-    "property": "zen.fix.cleanui",
-    "label": "Clean UI & No Bookmarks",
-    "type": "checkbox"
-  },
-  {
-    "property": "zen.fix.essentials",
-    "label": "Essentials Grid Layout",
-    "type": "checkbox"
-  }
+    {
+        "property": "zen.fix.newtab",
+        "label": "Start Page Logo",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": true
+    },
+    {
+        "property": "zen.fix.fade",
+        "label": "Fade In Transparent Background",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": true
+    },
+    {
+        "property": "zen.fix.tabs",
+        "label": "Transparent Tabs & Dot Indicator",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.pending",
+        "label": "Pending Tab Status",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.cleanui",
+        "label": "Clean UI & No Bookmarks",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.essentials",
+        "label": "Essentials Grid Layout",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.no-animation",
+        "label": "Disable logo animation",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.hide-urlbar",
+        "label": "Hide address bar on start page",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.stronger-fade",
+        "label": "Stronger background fade gradient",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.tab-borders.enabled",
+        "label": "Enable custom tab borders",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.tab-borders.color",
+        "label": "Tab border color (CSS color value)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "rgba(128,128,128,0.25)"
+    },
+    {
+        "property": "zen.fix.tab-borders.width",
+        "label": "Tab border width (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "1px"
+    },
+    {
+        "property": "zen.fix.tab-borders.radius",
+        "label": "Tab border radius (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "8px"
+    }
 ]

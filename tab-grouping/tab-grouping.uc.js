@@ -2940,13 +2940,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       return;
     }
 
-    tabContainerEventHandler = (event) => {
-      const triggerEvents = new Set([
-        "TabOpen", "TabClose", "TabPinned", "TabUnpinned",
-        "TabAttrModified", "TabMove",
-        "TabGroupAdd", "TabGroupRemove", "TabGrouped", "TabUngrouped"
-      ]);
-    };
+    tabContainerEventHandler = () => {};
 
     TAB_CONTAINER_EVENTS.forEach((eventName) => {
       gBrowser.tabContainer.addEventListener(eventName, tabContainerEventHandler);
@@ -3052,7 +3046,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           patchClearButtonToPreserveGroups();
           addTabEventListeners();
           processExistingTabGroups();
-
           return true;
         }
       } catch (e) {

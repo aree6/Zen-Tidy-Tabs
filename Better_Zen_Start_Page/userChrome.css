@@ -22,6 +22,16 @@ transparent 100%
   );
 /* The Logo: Animated SVG */
 --zen-logo: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 500'><style>@keyframes hybridEnter{0%{opacity:0;transform:translateY(25px);letter-spacing:0.2em;filter:blur(6px)}100%{opacity:1;transform:translateY(0);letter-spacing:0;filter:blur(0)}}@keyframes colorBloom{0%{fill:%23222222;letter-spacing:0}100%{fill:%23B84B39;letter-spacing:0.05em}}text{font-family:Junicode,Libre Baskerville,serif;font-weight:500;font-size:7.5em;text-anchor:middle;fill:%23222222}.line1{animation:hybridEnter 0.7s cubic-bezier(0.22,1,0.36,1) forwards}.line2{opacity:0;animation:hybridEnter 0.7s cubic-bezier(0.22,1,0.36,1) 0.14s forwards}.coral{font-style:italic;display:inline-block;animation:colorBloom 0.4s ease-out 0.84s forwards;fill:%23222222}</style><text x='50%25' y='42%25' class='line1'>welcome to</text><text x='50%25' y='70%25' class='line2'>a <tspan class='coral'>calmer</tspan> internet</text></svg>");
+/* Static logo (no animation) */
+--zen-logo-static: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 500'><style>text{font-family:Junicode,Libre Baskerville,serif;font-weight:500;font-size:7.5em;text-anchor:middle;fill:%23222222}.coral{font-style:italic;fill:%23B84B39}</style><text x='50%25' y='42%25'>welcome to</text><text x='50%25' y='70%25'>a <tspan class='coral'>calmer</tspan> internet</text></svg>");
+/* Stronger fade gradient */
+--zen-fade-bg-strong: linear-gradient(
+    to right,
+    var(--translucent-gradient-start) 0%,
+    var(--translucent-gradient-mid) 4%,
+    transparent 8%,
+    transparent 100%
+  );
 }
 @media (prefers-color-scheme: dark) {
 :root {
@@ -39,6 +49,14 @@ transparent 4%,
 transparent 100%
     );
 --zen-logo: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 500'><style>@keyframes hybridEnter{0%{opacity:0;transform:translateY(25px);letter-spacing:0.2em;filter:blur(6px)}100%{opacity:1;transform:translateY(0);letter-spacing:0;filter:blur(0)}}@keyframes colorBloom{0%{fill:%23CEC6BC;letter-spacing:0}100%{fill:%23E07B69;letter-spacing:0.05em}}text{font-family:Junicode,Libre Baskerville,serif;font-weight:500;font-size:7.5em;text-anchor:middle;fill:%23CEC6BC}.line1{animation:hybridEnter 0.7s cubic-bezier(0.22,1,0.36,1) forwards}.line2{opacity:0;animation:hybridEnter 0.7s cubic-bezier(0.22,1,0.36,1) 0.14s forwards}.coral{font-style:italic;display:inline-block;animation:colorBloom 0.4s ease-out 0.84s forwards;fill:%23CEC6BC}</style><text x='50%25' y='42%25' class='line1'>welcome to</text><text x='50%25' y='70%25' class='line2'>a <tspan class='coral'>calmer</tspan> internet</text></svg>");
+    --zen-logo-static: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 500'><style>text{font-family:Junicode,Libre Baskerville,serif;font-weight:500;font-size:7.5em;text-anchor:middle;fill:%23CEC6BC}.coral{font-style:italic;fill:%23E07B69}</style><text x='50%25' y='42%25'>welcome to</text><text x='50%25' y='70%25'>a <tspan class='coral'>calmer</tspan> internet</text></svg>");
+    --zen-fade-bg-strong: linear-gradient(
+        to right,
+        var(--translucent-gradient-start) 0%,
+        var(--translucent-gradient-mid) 4%,
+        transparent 8%,
+        transparent 100%
+      );
   }
 }
 /* --- FEATURE 1: START PAGE LOGO (Default: ON) --- */
@@ -57,6 +75,26 @@ background-color: transparent !important;
 .browserStack {
 background-image: var(--zen-fade-bg) !important;
 background-color: transparent !important;
+  }
+}
+/* --- OPTIONAL: STRONGER BACKGROUND FADE (Default: OFF) --- */
+@media (-moz-bool-pref: "zen.fix.stronger-fade") {
+.browserStack {
+background-image: var(--zen-fade-bg-strong) !important;
+background-color: transparent !important;
+  }
+}
+/* --- OPTIONAL: DISABLE LOGO ANIMATION (Default: OFF) --- */
+@media (-moz-bool-pref: "zen.fix.no-animation") {
+#browser:has([zen-empty-tab="true"][selected="true"]) .browserStack {
+background-image: var(--zen-logo-static), var(--zen-fade-bg) !important;
+  }
+}
+/* --- OPTIONAL: HIDE ADDRESS BAR ON START PAGE (Default: OFF) --- */
+@media (-moz-bool-pref: "zen.fix.hide-urlbar") {
+#browser:has([zen-empty-tab="true"][selected="true"]) #urlbar-container,
+#browser:has([zen-empty-tab="true"][selected="true"]) #urlbar {
+display: none !important;
   }
 }
 /* --- OPTIONAL: TRANSPARENT TABS & DOT INDICATOR (Default: OFF) --- */
@@ -121,5 +159,25 @@ grid-template-columns: repeat(auto-fit, minmax(2.50em, auto)) !important;
 transform: scale(1.8) !important;
 margin: 0 !important;
 padding: 0 !important;
+  }
+}
+/* --- OPTIONAL: CUSTOM TAB BORDERS (Default: OFF) --- */
+:root {
+  --zen-tab-border-color: rgba(128,128,128,0.25);
+  --zen-tab-border-width: 1px;
+  --zen-tab-border-radius: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --zen-tab-border-color: rgba(255,255,255,0.15);
+  }
+}
+@media (-moz-bool-pref: "zen.fix.tab-borders.enabled") {
+  .tabbrowser-tab .tab-stack .tab-background {
+    border: var(--zen-tab-border-width) solid var(--zen-tab-border-color) !important;
+    border-radius: var(--zen-tab-border-radius) !important;
+  }
+  .tabbrowser-tab[selected="true"] .tab-stack .tab-background {
+    border-color: var(--zen-tab-border-color) !important;
   }
 }
