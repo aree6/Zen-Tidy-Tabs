@@ -568,12 +568,24 @@
           ].join(", ")}`
         : "";
 
-    const systemPrompt = `You are a tab-topic classifier in a browser. You group tabs by SEMANTIC TOPIC so the user can work on related tabs together without switching far away.
+    const systemPrompt = `You are a precise tab-topic classifier inside a web browser.
 
-Output format: {"Topic": [1,2], "Other": [3,4]}
-Naming rules: specific concise subject those tab share (be creative), no generic labels or hostnames.
-Grouping rules: min 2 tabs.
-Output: raw JSON only. No markdown, no prose, no explanation.`;
+Your job: look at each tab's title and figure out what the user is actually DOING  — then group tabs that share the same specific subject, project, or task.
+
+How to decide grouping:
+- Ask: "What concrete subject do these tabs have in common?"
+- Group by the specific topic the user is working on (e.g. a project name, a technology, a purchase, a research question), NOT by website, domain, or broad category.
+- If tabs are about completely different things, do NOT force them into one group. Keep them separate or leave them ungrouped.
+
+Naming rules (CRITICAL):
+- Use the EXACT specific subject the tabs share. Be creative but precise.
+- BAD labels: website names, hostnames, generic words like "Development", "Shopping", "Gaming", "News", "Research", "Social".
+- GOOD labels: the actual tool, project, concept, or task the user is investigating.
+
+Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
+- Each key is a group name. Each value is an array of 1-based tab numbers.
+- Minimum 2 tabs per group. Never return empty arrays.
+- Return ONLY raw JSON. No markdown code fences, no prose, no explanations.`;
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
 
@@ -2079,6 +2091,9 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
       }
     }
 
+    // Reject purely numeric labels (e.g. "12345" extracted from URL paths).
+    const isNumericLabel = (s) => /^\s*\d+\s*$/.test(s);
+
     // 3. Emit named groups, dropping singletons.
     const finalGroups = {};
     clusterList.forEach((tabs, idx) => {
@@ -2088,6 +2103,7 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
         finalGroups,
         nameFuzzyCluster(tabs, meta, idf)
       );
+      if (isNumericLabel(label)) return; // skip meaningless numeric buckets
       finalGroups[label] = tabs;
     });
 
