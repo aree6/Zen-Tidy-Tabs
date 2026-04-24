@@ -89,12 +89,12 @@
   // or "openrouter" but no API key), returns "none" so the caller can
   // surface a clear failure. Hybrid is always considered available because
   // it contains its own fallback chain.
+  // Root preferences.json saves the engine choice at zen.tidytabs.ai.group-namer.
+  // Values are either "local" or an OpenRouter model slug (e.g. "ling-flash").
   const getSelectedEngine = () => {
-    const choice = (CONFIG.GROUPING_ENGINE || "hybrid").trim().toLowerCase();
-    if (choice === "hybrid") return "hybrid";
+    const choice = (CONFIG.GROUPING_ENGINE || "").trim().toLowerCase();
     if (choice === "local") return isAIEnabled() ? "local-ai" : "none";
-    if (choice === "openrouter") return isOpenRouterConfigured() ? "openrouter" : "none";
-    if (choice === "fuzzy") return "fuzzy";
+    if (OPENROUTER_MODELS[choice]) return isOpenRouterConfigured() ? "openrouter" : "none";
     return "none";
   };
 
@@ -109,6 +109,8 @@
   const OPENROUTER_MODELS = {
     "ling-flash": "inclusionai/ling-2.6-flash:free",
     "glm-air": "z-ai/glm-4.5-air:free",
+    "llama33-70b": "meta-llama/llama-3.3-70b-instruct:free",
+    "gemma3-27b": "google/gemma-3-27b-it:free",
   };
 
   const PREF_BRANCH = "zen.tidytabs.";
@@ -119,7 +121,7 @@
     MENU_SORT_GROUPS: ["bool", "menu.sort-groups"],
     MENU_SORT_FOLDERS: ["bool", "menu.sort-folders"],
     GROUP_LEFTOVERS_AS_MISC: ["bool", "group-leftovers-as-misc"],
-    GROUPING_ENGINE: ["string", "grouping-engine"],
+    GROUPING_ENGINE: ["string", "ai.group-namer"],
     OPENROUTER_MODEL: ["string", "openrouter.model"],
     OPENROUTER_API_KEY: ["string", "openrouter.api-key"],
     PROTECTED_HOSTS: ["string", "behavior.protected-hosts"],
@@ -486,7 +488,7 @@
   };
 
   const isOpenRouterConfigured = () => {
-    const slug = (CONFIG.OPENROUTER_MODEL || "").trim();
+    const slug = (CONFIG.GROUPING_ENGINE || "").trim();
     if (!slug || !OPENROUTER_MODELS[slug]) return false;
     return !!(CONFIG.OPENROUTER_API_KEY || "").trim();
   };
@@ -537,7 +539,7 @@
     const validTabs = (tabs || []).filter((t) => t?.isConnected);
     if (validTabs.length < 2) return null; // nothing meaningful to cluster
 
-    const modelSlug = (CONFIG.OPENROUTER_MODEL || "").trim();
+    const modelSlug = (CONFIG.GROUPING_ENGINE || "").trim();
     const modelId = OPENROUTER_MODELS[modelSlug];
     const apiKey = (CONFIG.OPENROUTER_API_KEY || "").trim();
 
@@ -2205,7 +2207,7 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
       }
 
       // ----- OpenRouter -----
-      if (engine === "openrouter" || engine === "hybrid") {
+      if (engine === "openrouter") {
         console.log(
           "[TabSort] Using OpenRouter full-grouping for",
           initialTabsToSort.length,
@@ -2226,14 +2228,9 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
       }
 
       // ----- Local AI -----
-      if (
-        (engine === "local-ai" || (engine === "hybrid" && !engineProducedGroups)) &&
-        isAIEnabled()
-      ) {
+      if (engine === "local-ai" && isAIEnabled()) {
         console.log(
-          engine === "hybrid"
-            ? "[TabSort] OpenRouter returned nothing; trying local AI..."
-            : "[TabSort] Using local AI grouping for",
+          "[TabSort] Using local AI grouping for",
           initialTabsToSort.length,
           "tabs"
         );
@@ -2250,23 +2247,6 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
         });
         finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
         engineProducedGroups = aiTabTopics.length > 0;
-      }
-
-      // ----- Fuzzy -----
-      if (
-        engine === "fuzzy" ||
-        (engine === "hybrid" && !engineProducedGroups)
-      ) {
-        console.log(
-          engine === "hybrid"
-            ? "[TabSort] Local AI unavailable; falling back to fuzzy..."
-            : "[TabSort] Using fuzzy grouping for",
-          initialTabsToSort.length,
-          "tabs"
-        );
-        finalGroups = fuzzyGroupByTokens(initialTabsToSort, allExistingGroupNames);
-        engineProducedGroups = Object.keys(finalGroups).length > 0;
-        usedFuzzy = true;
       }
 
       // --- Rescue ungrouped tabs ---
