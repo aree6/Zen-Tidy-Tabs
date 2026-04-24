@@ -1034,6 +1034,13 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     });
   };
 
+  const getTabIconUrl = (tab) => {
+    const tabImage = tab.getAttribute?.("image");
+    if (tabImage) return tabImage;
+    const iconImage = tab.querySelector(".tab-icon-image");
+    return iconImage?.getAttribute?.("src") || null;
+  };
+
   const refreshGroupFaviconColors = async () => {
     if (!window.gBrowser) return;
     const groups = document.querySelectorAll(GROUP_NODE_SELECTOR);
@@ -1053,12 +1060,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         }
         continue;
       }
-      // Color is frozen once sampled — reordering tabs won't change it.
       if (group._tidyFaviconColor) { skipped++; continue; }
       const firstTab = group.querySelector(".tabbrowser-tab");
       if (!firstTab) { noTab++; continue; }
-      const iconImage = firstTab.querySelector(".tab-icon-image");
-      const iconUrl = iconImage?.src;
+      const iconUrl = getTabIconUrl(firstTab);
       if (!iconUrl) { noIcon++; continue; }
       group._tidyFaviconUrl = iconUrl;
       const color = await sampleFaviconColor(iconUrl);
@@ -1089,8 +1094,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         }
         continue;
       }
-      const iconImage = tab.querySelector(".tab-icon-image");
-      const iconUrl = iconImage?.src;
+      const iconUrl = getTabIconUrl(tab);
       if (!iconUrl) {
         if (tab._tidyPinnedFaviconUrl) {
           tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
