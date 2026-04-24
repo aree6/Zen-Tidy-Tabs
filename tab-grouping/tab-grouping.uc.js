@@ -52,12 +52,6 @@
     // Optional comma/newline-separated host list that should stay loose
     // (never auto-grouped), e.g. "mail.google.com, calendar.google.com".
     PROTECTED_HOSTS: "",
-    // Tint pinned tab backgrounds using the favicon's dominant color at 10%
-    // opacity — adds a subtle contextual color cue to each pinned tab.
-    ENABLE_PINNED_TAB_FAVICON_BG: true,
-    // Tint group/folder backgrounds from the first tab's favicon. Once set
-    // the color is frozen — reordering tabs inside the group won't change it.
-    ENABLE_GROUP_FAVICON_BG: true,
   };
 
   const hasMeaningfulTitleSignal = (title) => {
@@ -130,8 +124,6 @@
     OPENROUTER_MODEL: ["string", "openrouter.model"],
     OPENROUTER_API_KEY: ["string", "openrouter.api-key"],
     PROTECTED_HOSTS: ["string", "behavior.protected-hosts"],
-    ENABLE_PINNED_TAB_FAVICON_BG: ["bool", "ui.enable-pinned-favicon-bg"],
-    ENABLE_GROUP_FAVICON_BG: ["bool", "ui.enable-group-favicon-bg"],
   };
 
   const services =
@@ -302,10 +294,6 @@
   let namingEnginePromise = null;
   const EMBEDDING_CACHE_LIMIT = 400;
   const EMBEDDING_CACHE = new Map();
-
-  let faviconRefreshRaf = null;
-  let faviconRefreshInFlight = false;
-  let faviconRefreshPending = false;
 
   const GROUP_NODE_SELECTOR = ":is(tab-group, zen-folder)";
 
@@ -973,282 +961,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     style.textContent = TREE_CONNECTOR_CSS;
     document.documentElement.appendChild(style);
   };
-
-  // --- Favicon color sampling for group/folder background tint ---------
-
-  const FAVICON_COLOR_CACHE = new Map();
-  const FAVICON_COLOR_CACHE_LIMIT = 300;
-
-  const cacheFaviconColor = (iconUrl, color) => {
-    if (!iconUrl) return;
-    if (FAVICON_COLOR_CACHE.has(iconUrl)) {
-      FAVICON_COLOR_CACHE.delete(iconUrl);
-    }
-    FAVICON_COLOR_CACHE.set(iconUrl, color);
-    if (FAVICON_COLOR_CACHE.size > FAVICON_COLOR_CACHE_LIMIT) {
-      const oldestKey = FAVICON_COLOR_CACHE.keys().next().value;
-      FAVICON_COLOR_CACHE.delete(oldestKey);
-    }
-  };
-
-  const sampleFaviconColor = (iconUrl) => {
-    if (FAVICON_COLOR_CACHE.has(iconUrl)) {
-      return Promise.resolve(FAVICON_COLOR_CACHE.get(iconUrl));
-    }
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = 4;
-          canvas.height = 4;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          ctx.drawImage(img, 0, 0, 4, 4);
-          const data = ctx.getImageData(0, 0, 4, 4).data;
-          let r = 0, g = 0, b = 0, count = 0;
-          for (let i = 0; i < data.length; i += 4) {
-            if (data[i + 3] < 128) continue; // skip transparent pixels
-            r += data[i];
-            g += data[i + 1];
-            b += data[i + 2];
-            count++;
-          }
-          if (count === 0) {
-            console.log("[TidyTabs] All pixels transparent for", iconUrl.substring(0, 40));
-            cacheFaviconColor(iconUrl, null);
-            resolve(null);
-            return;
-          }
-          const color = `rgb(${Math.round(r / count)}, ${Math.round(g / count)}, ${Math.round(b / count)})`;
-          console.log("[TidyTabs] Extracted color:", color, "from", iconUrl.substring(0, 40));
-          cacheFaviconColor(iconUrl, color);
-          resolve(color);
-        } catch (e) {
-          console.log("[TidyTabs] Canvas error:", e?.message, "for", iconUrl.substring(0, 40));
-          cacheFaviconColor(iconUrl, null);
-          resolve(null);
-        }
-      };
-      img.onerror = (e) => {
-        console.log("[TidyTabs] Image load error for", iconUrl.substring(0, 40));
-        cacheFaviconColor(iconUrl, null);
-        resolve(null);
-      };
-      // For SVG data URIs, they might not render properly at small sizes
-      // Try to load anyway, but set a timeout as SVGs can hang
-      img.src = iconUrl;
-    });
-  };
-
-  const getTabIconUrl = (tab) => {
-    // Most reliable: Firefox tabbrowser API (works for all tab types)
-    try {
-      if (window.gBrowser?.getIcon) {
-        const icon = gBrowser.getIcon(tab);
-        if (icon) return icon;
-      }
-    } catch (e) {
-      // gBrowser.getIcon may throw for non-tabbrowser tabs
-    }
-    // Fallback 1: XUL tab "image" attribute (set by tabbrowser)
-    const tabImage = tab.getAttribute?.("image");
-    if (tabImage) return tabImage;
-    // Fallback 2: inner html:img src attribute
-    const iconImage = tab.querySelector(".tab-icon-image");
-    const src = iconImage?.getAttribute?.("src");
-    if (src) return src;
-    // Fallback 3: list-style-image CSS property on the icon element
-    const listImage = iconImage?.style?.listStyleImage;
-    if (listImage && listImage !== "none") {
-      const match = listImage.match(/url\("?(.+?)"?\)/);
-      if (match) return match[1];
-    }
-    return null;
-  };
-
-  // Inline background application — bypasses all CSS specificity wars
-  // by writing directly onto the style attribute of the target element.
-  const applyTintBackground = (element, color, opacity = 0.25) => {
-    if (!element) return;
-    const tint = `color-mix(in srgb, ${color} ${Math.round(opacity * 100)}%, transparent)`;
-    element.style.setProperty("background", tint, "important");
-    element.style.setProperty("transition", "background 0.2s ease", "important");
-  };
-
-  const clearTintBackground = (element) => {
-    if (!element) return;
-    element.style.removeProperty("background");
-    element.style.removeProperty("transition");
-  };
-
-  // Find the first tab in a group that has a real favicon (skip blanks).
-  const findFaviconTab = (group) => {
-    const tabs = group.querySelectorAll(".tabbrowser-tab");
-    for (const tab of tabs) {
-      const url = getTabIconUrl(tab);
-      if (url) return { tab, url };
-    }
-    return null;
-  };
-
-  const refreshGroupFaviconColors = async () => {
-    if (!window.gBrowser) return;
-    const groups = document.querySelectorAll(GROUP_NODE_SELECTOR);
-    console.log(`[TidyTabs] Found ${groups.length} group(s)/folder(s)`);
-    if (!groups.length) return;
-    let changed = 0;
-    let skipped = 0;
-    let noIcon = 0;
-    let noColor = 0;
-    for (const group of groups) {
-      const labelContainer = group.querySelector(":scope > .tab-group-label-container");
-      if (!CONFIG.ENABLE_GROUP_FAVICON_BG) {
-        if (group._tidyFaviconColor) {
-          clearTintBackground(labelContainer);
-          group._tidyFaviconUrl = null;
-          group._tidyFaviconColor = null;
-        }
-        continue;
-      }
-      if (group._tidyFaviconColor) {
-        // Reapply in case DOM was recreated
-        applyTintBackground(labelContainer, group._tidyFaviconColor);
-        skipped++;
-        continue;
-      }
-      const found = findFaviconTab(group);
-      if (!found) { noIcon++; continue; }
-      group._tidyFaviconUrl = found.url;
-      const color = await sampleFaviconColor(found.url);
-      if (color) {
-        group._tidyFaviconColor = color;
-        applyTintBackground(labelContainer, color);
-        changed++;
-      } else {
-        noColor++;
-      }
-    }
-    console.log(`[TidyTabs] Groups: ${changed} set, ${skipped} frozen, ${noIcon} no-icon, ${noColor} no-color`);
-  };
-
-  const refreshPinnedTabFaviconColors = async () => {
-    if (!window.gBrowser) return;
-    const pinnedTabs = document.querySelectorAll('.tabbrowser-tab[pinned="true"]');
-    console.log(`[TidyTabs] Found ${pinnedTabs.length} pinned tab(s)`);
-    let changed = 0;
-    let reapplied = 0;
-    let noIcon = 0;
-    let noColor = 0;
-    for (const tab of pinnedTabs) {
-      const tabBackground = tab.querySelector(".tab-background");
-      if (!CONFIG.ENABLE_PINNED_TAB_FAVICON_BG) {
-        if (tab._tidyPinnedFaviconColor) {
-          clearTintBackground(tabBackground);
-          tab._tidyPinnedFaviconUrl = null;
-          tab._tidyPinnedFaviconColor = null;
-        }
-        continue;
-      }
-      const iconUrl = getTabIconUrl(tab);
-      if (!iconUrl) {
-        if (tab._tidyPinnedFaviconColor) {
-          clearTintBackground(tabBackground);
-          tab._tidyPinnedFaviconUrl = null;
-          tab._tidyPinnedFaviconColor = null;
-        }
-        noIcon++;
-        continue;
-      }
-      // Same URL: just reapply (covers DOM rebuilds) without re-sampling.
-      if (tab._tidyPinnedFaviconUrl === iconUrl && tab._tidyPinnedFaviconColor) {
-        applyTintBackground(tabBackground, tab._tidyPinnedFaviconColor);
-        reapplied++;
-        continue;
-      }
-      tab._tidyPinnedFaviconUrl = iconUrl;
-      const color = await sampleFaviconColor(iconUrl);
-      if (color) {
-        tab._tidyPinnedFaviconColor = color;
-        applyTintBackground(tabBackground, color);
-        changed++;
-      } else {
-        noColor++;
-      }
-    }
-    console.log(`[TidyTabs] Pinned: ${changed} set, ${reapplied} reapplied, ${noIcon} no-icon, ${noColor} no-color`);
-  };
-
-  const PINNED_TAB_FAVICON_CSS = `
-    /* Use higher specificity to beat Zen native tab-background styles */
-    #tabbrowser-tabs .tabbrowser-tab[pinned="true"] .tab-background,
-    .zen-workspace-pinned-tabs-section .tabbrowser-tab[pinned="true"] .tab-background {
-      background: color-mix(in srgb, var(--tidy-tabs-pinned-favicon-color, transparent) 25%, transparent) !important;
-      transition: background 0.2s ease;
-    }
-  `;
-
-  const GROUP_FAVICON_CSS = `
-    /* Match userChrome.css specificity (0,1,2) and use background shorthand */
-    zen-folder > .tab-group-label-container {
-      background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 25%, transparent) !important;
-      transition: background 0.2s ease;
-    }
-    tab-group:not(zen-folder) > .tab-group-label-container {
-      background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 25%, transparent) !important;
-      transition: background 0.2s ease;
-    }
-  `;
-
-  const ensurePinnedTabFaviconStyles = () => {
-    const styleId = "tidy-tabs-pinned-favicon-style";
-    const existingStyle = document.getElementById(styleId);
-    if (existingStyle) {
-      existingStyle.textContent = PINNED_TAB_FAVICON_CSS;
-      return;
-    }
-    const style = document.createElement("style");
-    style.id = styleId;
-    style.textContent = PINNED_TAB_FAVICON_CSS;
-    document.documentElement.appendChild(style);
-    console.log("[TidyTabs] Injected pinned-tab favicon styles");
-  };
-
-  const ensureGroupFaviconStyles = () => {
-    const styleId = "tidy-tabs-group-favicon-style";
-    const existingStyle = document.getElementById(styleId);
-    if (existingStyle) {
-      existingStyle.textContent = GROUP_FAVICON_CSS;
-      return;
-    }
-    const style = document.createElement("style");
-    style.id = styleId;
-    style.textContent = GROUP_FAVICON_CSS;
-    document.documentElement.appendChild(style);
-    console.log("[TidyTabs] Injected group/folder favicon styles");
-  };
-
-  const scheduleFaviconRefresh = () => {
-    faviconRefreshPending = true;
-    if (faviconRefreshRaf !== null) return;
-    faviconRefreshRaf = requestAnimationFrame(async () => {
-      faviconRefreshRaf = null;
-      if (faviconRefreshInFlight) return;
-      faviconRefreshInFlight = true;
-      try {
-        faviconRefreshPending = false;
-        console.log("[TidyTabs] Running favicon refresh...");
-        await refreshGroupFaviconColors();
-        await refreshPinnedTabFaviconColors();
-      } finally {
-        faviconRefreshInFlight = false;
-        if (faviconRefreshPending) {
-          scheduleFaviconRefresh();
-        }
-      }
-    });
-  };
-
-
 
   // --- AI Interaction ---
 
@@ -3234,9 +2946,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         "TabAttrModified", "TabMove",
         "TabGroupAdd", "TabGroupRemove", "TabGrouped", "TabUngrouped"
       ]);
-      if (event && triggerEvents.has(event.type)) {
-        scheduleFaviconRefresh();
-      }
     };
 
     TAB_CONTAINER_EVENTS.forEach((eventName) => {
@@ -3251,13 +2960,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     try {
       // Stop any running animations
       cleanupAnimation();
-
-      if (faviconRefreshRaf !== null) {
-        cancelAnimationFrame(faviconRefreshRaf);
-        faviconRefreshRaf = null;
-      }
-      faviconRefreshPending = false;
-      faviconRefreshInFlight = false;
 
       if (clearButtonPatched && originalCloseAllUnpinnedTabs && window.gZenWorkspaces) {
         window.gZenWorkspaces.closeAllUnpinnedTabs = originalCloseAllUnpinnedTabs;
@@ -3318,7 +3020,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       embeddingEnginePromise = null;
       namingEnginePromise = null;
       EMBEDDING_CACHE.clear();
-      FAVICON_COLOR_CACHE.clear();
 
       // Clear DOM cache
       domCache.invalidate();
@@ -3351,9 +3052,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           patchClearButtonToPreserveGroups();
           addTabEventListeners();
           processExistingTabGroups();
-          ensurePinnedTabFaviconStyles();
-          ensureGroupFaviconStyles();
-          scheduleFaviconRefresh();
 
           return true;
         }

@@ -81,18 +81,4 @@
       "disabledOn": [],
       "defaultValue": true
     },
-    {
-      "property": "zen.tidytabs.ui.enable-pinned-favicon-bg",
-      "label": "Tint pinned tab backgrounds from favicon color",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.tidytabs.ui.enable-group-favicon-bg",
-      "label": "Tint group/folder backgrounds from first tab's favicon (frozen once set)",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    }
   ]
