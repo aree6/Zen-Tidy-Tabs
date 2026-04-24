@@ -559,44 +559,12 @@
           ].join(", ")}`
         : "";
 
-    const systemPrompt = useFolders
-  ? `You are a tab-topic classifier. Group tabs by CONTEXUAL SEMANTIC TOPIC only. Never by hostname or domain.
+    const systemPrompt = `You are a tab-topic classifier in a browser. You group tabs by SEMANTIC TOPIC so the user can work on related tabs together without switching far away.
 
-      Output format — FLAT (default): {"Topic": [1,2], "Other": [3,4]}
-      Output format — NESTED (only when needed): {"Broad": {"Sub A": [1,2], "Sub B": [3,4]}, "Flat": [5,6]}
-
-      Naming rules:
-      - Use the specific subject from the tab title (e.g. "Pan Pizza", "React Router", "Tokyo Trip")
-      - Never use generic labels: Cooking, Gaming, Travel, Dev, Work, Productivity, Learning
-      - Never use website or domain names (just for you understand what user is doing in their broswer)
-
-      Grouping rules:
-      - Minimum 2 tabs per group. Omit solo tabs.
-      - Same host ≠ same group. Different hosts ≠ different groups. Topic is the only signal.
-
-      Nesting rules (prefer flat):
-      - Only nest when a broad theme has 2+ sub-themes with 2+ tabs each (4+ tabs total under that parent)
-      - A sub-theme with 1 tab → keep flat or omit
-      - A parent with 1 child → keep flat
-      - Max 2 levels deep
-
-      Output: raw JSON only. No markdown, no prose, no explanation.`
-
-        : `You are a tab-topic classifier. Group tabs by SEMANTIC TOPIC only. Never by hostname or domain.
-
-      Output format: {"Topic": [1,2], "Other": [3,4]}
-
-      Naming rules:
-      - Use the specific subject from the tab title (e.g. "Pan Pizza", "React Router", "Tokyo Trip")
-      - Never use generic labels: Cooking, Gaming, Travel, Dev, Work, Productivity, Learning
-      - Never use website or domain names
-
-      Grouping rules:
-      - Minimum 2 tabs per group. Omit solo tabs.
-      - Same host ≠ same group. Different hosts ≠ different groups. Topic is the only signal. (Hostname is just for you understand what user is doing in their broswer)
-      - Each tab appears at most once.
-
-      Output: raw JSON only. No markdown, no prose, no explanation.`;
+Output format: {"Topic": [1,2], "Other": [3,4]}
+Naming rules: specific concise subject those tab share (be creative), no generic labels or hostnames.
+Grouping rules: min 2 tabs.
+Output: raw JSON only. No markdown, no prose, no explanation.`;
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
 
