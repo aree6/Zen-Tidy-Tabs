@@ -1,0 +1,12 @@
+{
+  "id": "better-zen-start-page",
+  "name": "Better Zen Start Page",
+  "description": "A sophisticated start page fix for Zen. Features a custom animated logo and a subtle transparent fade-in background.",
+  "author": "aree6",
+  "version": "1.0.3",
+  "homepage": "https://github.com/aree6/Better_Zen_Start_Page",
+  "style": {
+    "chrome": "userChrome.css"
+  },
+  "readme": "README.md"
+}
