@@ -1014,22 +1014,28 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
             count++;
           }
           if (count === 0) {
+            console.log("[TidyTabs] All pixels transparent for", iconUrl.substring(0, 40));
             cacheFaviconColor(iconUrl, null);
             resolve(null);
             return;
           }
           const color = `rgb(${Math.round(r / count)}, ${Math.round(g / count)}, ${Math.round(b / count)})`;
+          console.log("[TidyTabs] Extracted color:", color, "from", iconUrl.substring(0, 40));
           cacheFaviconColor(iconUrl, color);
           resolve(color);
         } catch (e) {
+          console.log("[TidyTabs] Canvas error:", e?.message, "for", iconUrl.substring(0, 40));
           cacheFaviconColor(iconUrl, null);
           resolve(null);
         }
       };
-      img.onerror = () => {
+      img.onerror = (e) => {
+        console.log("[TidyTabs] Image load error for", iconUrl.substring(0, 40));
         cacheFaviconColor(iconUrl, null);
         resolve(null);
       };
+      // For SVG data URIs, they might not render properly at small sizes
+      // Try to load anyway, but set a timeout as SVGs can hang
       img.src = iconUrl;
     });
   };
@@ -1039,37 +1045,24 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     try {
       if (window.gBrowser?.getIcon) {
         const icon = gBrowser.getIcon(tab);
-        if (icon) {
-          console.log("[TidyTabs] gBrowser.getIcon =>", icon.substring(0, 60));
-          return icon;
-        }
+        if (icon) return icon;
       }
     } catch (e) {
-      console.log("[TidyTabs] gBrowser.getIcon threw:", e?.message);
+      // gBrowser.getIcon may throw for non-tabbrowser tabs
     }
     // Fallback 1: XUL tab "image" attribute (set by tabbrowser)
     const tabImage = tab.getAttribute?.("image");
-    if (tabImage) {
-      console.log("[TidyTabs] tab.image attr =>", tabImage.substring(0, 60));
-      return tabImage;
-    }
+    if (tabImage) return tabImage;
     // Fallback 2: inner html:img src attribute
     const iconImage = tab.querySelector(".tab-icon-image");
     const src = iconImage?.getAttribute?.("src");
-    if (src) {
-      console.log("[TidyTabs] .tab-icon-image src =>", src.substring(0, 60));
-      return src;
-    }
+    if (src) return src;
     // Fallback 3: list-style-image CSS property on the icon element
     const listImage = iconImage?.style?.listStyleImage;
     if (listImage && listImage !== "none") {
       const match = listImage.match(/url\("?(.+?)"?\)/);
-      if (match) {
-        console.log("[TidyTabs] list-style-image =>", match[1].substring(0, 60));
-        return match[1];
-      }
+      if (match) return match[1];
     }
-    console.log("[TidyTabs] No icon found for tab", tab?.label);
     return null;
   };
 
@@ -1152,7 +1145,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     /* Use higher specificity to beat Zen native tab-background styles */
     #tabbrowser-tabs .tabbrowser-tab[pinned="true"] .tab-background,
     .zen-workspace-pinned-tabs-section .tabbrowser-tab[pinned="true"] .tab-background {
-      background: color-mix(in srgb, var(--tidy-tabs-pinned-favicon-color, transparent) 15%, transparent) !important;
+      background: color-mix(in srgb, var(--tidy-tabs-pinned-favicon-color, transparent) 25%, transparent) !important;
       transition: background 0.2s ease;
     }
   `;
@@ -1160,11 +1153,11 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   const GROUP_FAVICON_CSS = `
     /* Match userChrome.css specificity (0,1,2) and use background shorthand */
     zen-folder > .tab-group-label-container {
-      background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 15%, transparent) !important;
+      background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 25%, transparent) !important;
       transition: background 0.2s ease;
     }
     tab-group:not(zen-folder) > .tab-group-label-container {
-      background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 15%, transparent) !important;
+      background: color-mix(in srgb, var(--tidy-tabs-favicon-color, transparent) 25%, transparent) !important;
       transition: background 0.2s ease;
     }
   `;
