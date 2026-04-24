@@ -584,7 +584,6 @@ Naming rules (CRITICAL):
 
 Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 - Each key is a group name. Each value is an array of 1-based tab numbers.
-- Each group should have atlest 2 tabs (Important).
 - Return ONLY raw JSON. No markdown code fences, no prose, no explanations.`;
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
@@ -660,7 +659,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           assignedTabs.add(tab);
           tabsForGroup.push(tab);
         }
-        if (tabsForGroup.length === 0) continue;
+        if (tabsForGroup.length < 2) continue;
 
         // If the model reused a name with different casing vs. an existing
         // group, prefer the existing casing so we merge cleanly.
@@ -1038,8 +1037,13 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   const refreshGroupFaviconColors = async () => {
     if (!window.gBrowser) return;
     const groups = document.querySelectorAll(GROUP_NODE_SELECTOR);
+    console.log(`[TidyTabs] Found ${groups.length} group(s)/folder(s)`);
     if (!groups.length) return;
     let changed = 0;
+    let skipped = 0;
+    let noTab = 0;
+    let noIcon = 0;
+    let noColor = 0;
     for (const group of groups) {
       if (!CONFIG.ENABLE_GROUP_FAVICON_BG) {
         if (group._tidyFaviconColor) {
@@ -1050,27 +1054,33 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         continue;
       }
       // Color is frozen once sampled — reordering tabs won't change it.
-      if (group._tidyFaviconColor) continue;
+      if (group._tidyFaviconColor) { skipped++; continue; }
       const firstTab = group.querySelector(".tabbrowser-tab");
-      if (!firstTab) continue;
+      if (!firstTab) { noTab++; continue; }
       const iconImage = firstTab.querySelector(".tab-icon-image");
       const iconUrl = iconImage?.src;
-      if (!iconUrl) continue;
+      if (!iconUrl) { noIcon++; continue; }
       group._tidyFaviconUrl = iconUrl;
       const color = await sampleFaviconColor(iconUrl);
       if (color) {
         group._tidyFaviconColor = color;
         group.style.setProperty("--tidy-tabs-favicon-color", color);
         changed++;
+      } else {
+        noColor++;
       }
     }
-    if (changed) console.log(`[TidyTabs] Set favicon bg on ${changed} group(s)/folder(s)`);
+    console.log(`[TidyTabs] Groups: ${changed} set, ${skipped} frozen, ${noTab} no-tab, ${noIcon} no-icon, ${noColor} no-color`);
   };
 
   const refreshPinnedTabFaviconColors = async () => {
     if (!window.gBrowser) return;
     const pinnedTabs = document.querySelectorAll('.tabbrowser-tab[pinned="true"]');
+    console.log(`[TidyTabs] Found ${pinnedTabs.length} pinned tab(s)`);
     let changed = 0;
+    let skipped = 0;
+    let noIcon = 0;
+    let noColor = 0;
     for (const tab of pinnedTabs) {
       if (!CONFIG.ENABLE_PINNED_TAB_FAVICON_BG) {
         if (tab._tidyPinnedFaviconUrl) {
@@ -1086,19 +1096,20 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
           tab._tidyPinnedFaviconUrl = null;
         }
+        noIcon++;
         continue;
       }
-      if (tab._tidyPinnedFaviconUrl === iconUrl) continue;
+      if (tab._tidyPinnedFaviconUrl === iconUrl) { skipped++; continue; }
       tab._tidyPinnedFaviconUrl = iconUrl;
       const color = await sampleFaviconColor(iconUrl);
       if (color) {
         tab.style.setProperty("--tidy-tabs-pinned-favicon-color", color);
         changed++;
       } else {
-        tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
+        noColor++;
       }
     }
-    if (changed) console.log(`[TidyTabs] Set favicon bg on ${changed} pinned tab(s)`);
+    console.log(`[TidyTabs] Pinned: ${changed} set, ${skipped} cached, ${noIcon} no-icon, ${noColor} no-color`);
   };
 
   const PINNED_TAB_FAVICON_CSS = `
@@ -2360,6 +2371,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
               if (!topic || topic === "Uncategorized" || !tab || !tab.isConnected) return;
               if (!finalGroups[topic]) finalGroups[topic] = [];
               finalGroups[topic].push(tab);
+            });
+            // Discard groups the AI produced with only one tab
+            Object.keys(finalGroups).forEach((topic) => {
+              if (finalGroups[topic].length < 2) delete finalGroups[topic];
             });
             finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
             engineProducedGroups = hasGroups(finalGroups);
