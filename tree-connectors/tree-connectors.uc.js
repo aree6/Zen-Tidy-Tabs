@@ -607,6 +607,12 @@
         if (item.offsetHeight <= 0) return;
 
         if (window.gBrowser.isTabGroup(item)) {
+          if (item.hasAttribute("split-view-group")) {
+            // Split-view tabs don't get tree connectors — they are visually
+            // distinct enough on their own, whether inside a folder or alone.
+            return;
+          }
+
           if (item.isZenFolder) {
             const rootMost = item.rootMostCollapsedFolder;
             if (isParentCollapsed || (rootMost && rootMost !== item)) {
@@ -763,16 +769,10 @@
             y += targetElement.offsetHeight / 2;
           }
 
-          const isSplit =
-            !isRelated &&
-            window.gBrowser.isTabGroup(item) &&
-            item.hasAttribute("split-view-group");
-
           return {
             y,
             x,
             r: Math.min(CONFIG.TREE_BRANCH_RADIUS, Math.max(0, x - CONFIG.TREE_LINE_X)),
-            isSplit,
           };
         })
         .filter((point) => point.y > 1);
@@ -788,19 +788,8 @@
 
       const pathStart = isRelated && contextTab ? contextTab.offsetHeight / 2 : 0;
       let pathData = `M ${CONFIG.TREE_LINE_X} ${pathStart} L ${CONFIG.TREE_LINE_X} ${trunkTerminateY}`;
-      points.forEach(({ y, x, r, isSplit }) => {
-        if (isSplit) {
-          // Smooth ⊂-style C-curve for split-view tabs: a gentle cubic bezier
-          // that bulges left like a subset symbol opening to the right.
-          const depth = Math.max(4, Math.min(r, 7));
-          const height = depth * 0.6;
-          pathData += ` M ${CONFIG.TREE_LINE_X} ${y}` +
-            ` C ${CONFIG.TREE_LINE_X - depth} ${y - height}` +
-            `, ${x - depth} ${y - height}` +
-            `, ${x} ${y}`;
-        } else {
-          pathData += ` M ${CONFIG.TREE_LINE_X} ${y - r} A ${r} ${r} 0 0 0 ${CONFIG.TREE_LINE_X + r} ${y} L ${x} ${y}`;
-        }
+      points.forEach(({ y, x, r }) => {
+        pathData += ` M ${CONFIG.TREE_LINE_X} ${y - r} A ${r} ${r} 0 0 0 ${CONFIG.TREE_LINE_X + r} ${y} L ${x} ${y}`;
       });
 
       let path = host._cachedPathElement;
