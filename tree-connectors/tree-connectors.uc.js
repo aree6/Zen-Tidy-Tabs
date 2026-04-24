@@ -469,6 +469,8 @@
     // Skips folder-only concerns (nested-folder collapse, pinned-section
     // collapse) that don't exist for vanilla groups.
     refreshTabGroupConnector(group) {
+      if (group.hasAttribute("split-view-group")) return;
+
       const container = group.querySelector(":scope > .tab-group-container");
       if (!container) return;
 
