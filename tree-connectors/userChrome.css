@@ -45,3 +45,19 @@
   overflow: hidden !important;
   gap: 0 !important;
 }
+
+/* Group marker rotation for collapsed state */
+tab-group .group-marker {
+  transition: transform 0.15s ease-in-out;
+  transform-origin: center;
+}
+
+/* Collapsed tab-group visual styling */
+tab-group[collapsed] > .tab-group-label-container {
+  opacity: 0.8;
+}
+
+/* Ensure active tab in collapsed group stays visible */
+tab-group[collapsed] > .tab-group-container > tab:not([selected="true"]) {
+  display: none;
+}

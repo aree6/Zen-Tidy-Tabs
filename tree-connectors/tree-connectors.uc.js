@@ -168,6 +168,59 @@
       }
     }
 
+    // Wire up collapse/expand toggle on the group marker and header.
+    // Without Advanced-Tab-Groups, vanilla tab-groups have no click handler
+    // for collapsing — clicking the header does nothing and tree connectors
+    // glitch because hidden tabs still occupy layout space.
+    const marker = labelContainer.querySelector(".group-marker");
+    if (marker && !marker._tidyCollapseHandler) {
+      const syncTabVisibility = () => {
+        const container = group.querySelector(":scope > .tab-group-container");
+        if (!container) return;
+        const isCollapsed = group.hasAttribute("collapsed");
+        const hasActive = group.hasAttribute("has-active");
+        container.querySelectorAll(":scope > tab").forEach((tab) => {
+          const isActive = tab.matches("[selected='true']") || tab.hasAttribute("selected");
+          tab.hidden = isCollapsed && !isActive;
+        });
+        // Rotate the marker to show collapsed state (CSS transitions it).
+        marker.style.transform = isCollapsed ? "rotate(-90deg)" : "rotate(0deg)";
+      };
+
+      const toggleCollapse = (e) => {
+        if (e) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+        if (group.hasAttribute("collapsed")) {
+          group.removeAttribute("collapsed");
+          window.dispatchEvent(new CustomEvent("TabGroupExpand", { bubbles: true }));
+        } else {
+          group.setAttribute("collapsed", "true");
+          window.dispatchEvent(new CustomEvent("TabGroupCollapse", { bubbles: true }));
+        }
+        syncTabVisibility();
+      };
+
+      marker.addEventListener("click", toggleCollapse);
+      marker._tidyCollapseHandler = toggleCollapse;
+
+      // Clicking the label container (but not the close button) also toggles.
+      labelContainer.style.cursor = "pointer";
+      labelContainer.addEventListener("click", (e) => {
+        if (
+          e.target.closest(".group-marker") ||
+          e.target.closest(".tab-close-button")
+        ) {
+          return;
+        }
+        toggleCollapse(e);
+      });
+
+      // Sync visibility on first process in case the group was already collapsed.
+      syncTabVisibility();
+    }
+
     group.setAttribute("data-tidy-tabs-processed", "true");
   };
 
@@ -381,6 +434,9 @@
 
     onRefreshConnectors() {
       if (!window.gBrowser || !CONFIG.TREE_CONNECTORS_ENABLED) return;
+
+      // New groups created after init need collapse-toggle wiring too.
+      processExistingTabGroups();
 
       try {
         const activeWorkspace = document.querySelector("zen-workspace[active='true']");
