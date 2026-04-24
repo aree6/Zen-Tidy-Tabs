@@ -1066,6 +1066,31 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     return null;
   };
 
+  // Inline background application — bypasses all CSS specificity wars
+  // by writing directly onto the style attribute of the target element.
+  const applyTintBackground = (element, color, opacity = 0.25) => {
+    if (!element) return;
+    const tint = `color-mix(in srgb, ${color} ${Math.round(opacity * 100)}%, transparent)`;
+    element.style.setProperty("background", tint, "important");
+    element.style.setProperty("transition", "background 0.2s ease", "important");
+  };
+
+  const clearTintBackground = (element) => {
+    if (!element) return;
+    element.style.removeProperty("background");
+    element.style.removeProperty("transition");
+  };
+
+  // Find the first tab in a group that has a real favicon (skip blanks).
+  const findFaviconTab = (group) => {
+    const tabs = group.querySelectorAll(".tabbrowser-tab");
+    for (const tab of tabs) {
+      const url = getTabIconUrl(tab);
+      if (url) return { tab, url };
+    }
+    return null;
+  };
+
   const refreshGroupFaviconColors = async () => {
     if (!window.gBrowser) return;
     const groups = document.querySelectorAll(GROUP_NODE_SELECTOR);
@@ -1073,34 +1098,37 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     if (!groups.length) return;
     let changed = 0;
     let skipped = 0;
-    let noTab = 0;
     let noIcon = 0;
     let noColor = 0;
     for (const group of groups) {
+      const labelContainer = group.querySelector(":scope > .tab-group-label-container");
       if (!CONFIG.ENABLE_GROUP_FAVICON_BG) {
         if (group._tidyFaviconColor) {
-          group.style.removeProperty("--tidy-tabs-favicon-color");
+          clearTintBackground(labelContainer);
           group._tidyFaviconUrl = null;
           group._tidyFaviconColor = null;
         }
         continue;
       }
-      if (group._tidyFaviconColor) { skipped++; continue; }
-      const firstTab = group.querySelector(".tabbrowser-tab");
-      if (!firstTab) { noTab++; continue; }
-      const iconUrl = getTabIconUrl(firstTab);
-      if (!iconUrl) { noIcon++; continue; }
-      group._tidyFaviconUrl = iconUrl;
-      const color = await sampleFaviconColor(iconUrl);
+      if (group._tidyFaviconColor) {
+        // Reapply in case DOM was recreated
+        applyTintBackground(labelContainer, group._tidyFaviconColor);
+        skipped++;
+        continue;
+      }
+      const found = findFaviconTab(group);
+      if (!found) { noIcon++; continue; }
+      group._tidyFaviconUrl = found.url;
+      const color = await sampleFaviconColor(found.url);
       if (color) {
         group._tidyFaviconColor = color;
-        group.style.setProperty("--tidy-tabs-favicon-color", color);
+        applyTintBackground(labelContainer, color);
         changed++;
       } else {
         noColor++;
       }
     }
-    console.log(`[TidyTabs] Groups: ${changed} set, ${skipped} frozen, ${noTab} no-tab, ${noIcon} no-icon, ${noColor} no-color`);
+    console.log(`[TidyTabs] Groups: ${changed} set, ${skipped} frozen, ${noIcon} no-icon, ${noColor} no-color`);
   };
 
   const refreshPinnedTabFaviconColors = async () => {
@@ -1108,37 +1136,46 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     const pinnedTabs = document.querySelectorAll('.tabbrowser-tab[pinned="true"]');
     console.log(`[TidyTabs] Found ${pinnedTabs.length} pinned tab(s)`);
     let changed = 0;
-    let skipped = 0;
+    let reapplied = 0;
     let noIcon = 0;
     let noColor = 0;
     for (const tab of pinnedTabs) {
+      const tabBackground = tab.querySelector(".tab-background");
       if (!CONFIG.ENABLE_PINNED_TAB_FAVICON_BG) {
-        if (tab._tidyPinnedFaviconUrl) {
-          tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
+        if (tab._tidyPinnedFaviconColor) {
+          clearTintBackground(tabBackground);
           tab._tidyPinnedFaviconUrl = null;
+          tab._tidyPinnedFaviconColor = null;
         }
         continue;
       }
       const iconUrl = getTabIconUrl(tab);
       if (!iconUrl) {
-        if (tab._tidyPinnedFaviconUrl) {
-          tab.style.removeProperty("--tidy-tabs-pinned-favicon-color");
+        if (tab._tidyPinnedFaviconColor) {
+          clearTintBackground(tabBackground);
           tab._tidyPinnedFaviconUrl = null;
+          tab._tidyPinnedFaviconColor = null;
         }
         noIcon++;
         continue;
       }
-      if (tab._tidyPinnedFaviconUrl === iconUrl) { skipped++; continue; }
+      // Same URL: just reapply (covers DOM rebuilds) without re-sampling.
+      if (tab._tidyPinnedFaviconUrl === iconUrl && tab._tidyPinnedFaviconColor) {
+        applyTintBackground(tabBackground, tab._tidyPinnedFaviconColor);
+        reapplied++;
+        continue;
+      }
       tab._tidyPinnedFaviconUrl = iconUrl;
       const color = await sampleFaviconColor(iconUrl);
       if (color) {
-        tab.style.setProperty("--tidy-tabs-pinned-favicon-color", color);
+        tab._tidyPinnedFaviconColor = color;
+        applyTintBackground(tabBackground, color);
         changed++;
       } else {
         noColor++;
       }
     }
-    console.log(`[TidyTabs] Pinned: ${changed} set, ${skipped} cached, ${noIcon} no-icon, ${noColor} no-color`);
+    console.log(`[TidyTabs] Pinned: ${changed} set, ${reapplied} reapplied, ${noIcon} no-icon, ${noColor} no-color`);
   };
 
   const PINNED_TAB_FAVICON_CSS = `
