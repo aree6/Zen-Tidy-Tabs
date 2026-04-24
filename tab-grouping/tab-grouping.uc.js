@@ -563,25 +563,74 @@
       ? "You are a tab-topic classifier. Group tabs by SEMANTIC TOPIC / user intent. NEVER by hostname, domain, or website name.\n\n" +
         "FLAT: {\"Topic\": [1,2], \"Other\": [3,4]}\n" +
         "NESTED (rare): {\"Broad\": {\"Sub A\": [1,2], \"Sub B\": [3,4]}, \"Flat\": [5,6]}\n\n" +
-        "CRITICAL — topic vs hostname examples:\n" +
-        "WRONG (hostname-based): {\"YouTube\": [1,2,3], \"GitHub\": [4,5]}\n" +
-        "RIGHT (topic-based):    {\"Cooking\": [1], \"Gaming\": [2], \"Travel\": [3], \"Code Review\": [4], \"DevOps\": [5]}\n\n" +
+        "How to name groups — read the actual topic from each tab title, not the website or a generic category.\n\n" +
+        "Example for you to understand:\n" +
+        "Input:\n" +
+        "1. No-Knead Pan Pizza Dough Recipe  (youtube.com)\n" +
+        "2. Best Cheese for Pan Pizza  (youtube.com)\n" +
+        "3. Shibuya Tokyo Hotel Deals  (booking.com)\n" +
+        "4. Tokyo 5-Day Itinerary  (blog.travel.com)\n" +
+        "5. Minecraft Redstone Clock Tutorial  (youtube.com)\n" +
+        "6. Minecraft Observer Farm Build  (reddit.com)\n" +
+        "7. React Router v6 Migration Guide  (github.com)\n" +
+        "8. React Router Nested Routes Pattern  (github.com)\n" +
+        "9. Linux Kernel Process Scheduler Deep Dive repo (github.com)\n" +
+        "10. Minecraft Castle Blueprints  (reddit.com)\n" +
+        "11. Minecraft Tower Defense Build  (youtube.com)\n\n" +
+        "Output: {\"Pan Pizza\": [1,2], \"Tokyo Trip\": [3,4], \"Minecraft\": {\"Redstone\": [5,6], \"Building\": [10,11]}, \"React Router\": [7,8]}\n\n" +
+        "Reasoning:\n" +
+        "- [1,2] → \"Pan Pizza\": both tabs are about making pan pizza (dough and cheese). Same host (youtube.com) but grouped by the specific food topic, not the website.\n" +
+        "- [3,4] → \"Tokyo Trip\": hotel search in Shibuya and a Tokyo travel itinerary. Different hosts (booking.com, blog.travel.com) but same destination and travel goal.\n" +
+        "- [5,6] → nested under \"Minecraft\": both tabs are about Minecraft redstone mechanics (clocks and observer farms). different host but grouped by the redstone topic.\n" +
+        "- [10,11] → nested under \"Minecraft\": both tabs are about Minecraft building (castles and tower defense). different host but grouped by the building topic.\n" +
+        "- [5,6] and [10,11] share the broad theme \"Minecraft\" but are about different sub-topics (redstone vs building), so nesting improves organization.\n" +
+        "- [7,8] → \"React Router\": both tabs are about the React Router library (v6 migration and nested routes). Same host but grouped by the library/feature. Kept flat because there is no broader theme with 2+ distinct sub-themes of 2+ tabs each.\n" +
+        "- Tab 9 is omitted: it is about Linux kernel scheduling and has no partner on that topic to form a group of 2+. (same host is present but not the topic)\n\n" +
+        "Why tabs are NOT grouped differently:\n" +
+        "- Tabs 1 and 5 are both on youtube.com but one is about pizza and the other about Minecraft — completely different topics, so they MUST be separate.\n" +
+        "- Tab 4 (Tokyo itinerary) and tab 9 (Linux kernel) have no thematic overlap and are not grouped.\n" +
+        "- \"Pan Pizza\" was chosen because the specific subject is pan pizza; \"Cooking\" would be too generic. \"React Router\" was chosen because the tabs are about that library; \"Development\" would be too generic.\n" +
+        "- \"Minecraft\" is the parent because it is the broad theme; \"Redstone\" and \"Building\" are the distinct sub-themes. Nesting here improves UX because 4 Minecraft tabs would be scattered or overly broad if flat.\n\n" +
+        "Rules:\n" +
+        "- Extract the specific subject/project/task from the tab title itself.\n" +
+        "- NEVER use generic buckets like Cooking, Gaming, Travel, Development, Productivity, Learning, Work.\n" +
+        "- NEVER create groups named after websites, domains, or hostnames.\n" +
+        "- If tabs share a host but have different topics, they MUST go in different groups or be omitted.\n\n" +
         "Nesting rules:\n" +
         "- ONLY nest when a broad theme clearly splits into 2+ distinct sub-themes with 2+ tabs each.\n" +
         "- If a sub-theme has 1 tab, or a parent has 1 child, or a topic has <4 tabs total — keep FLAT.\n" +
         "- Prefer FLAT. Nesting must improve UX, not create empty hierarchy.\n" +
-        "- NEVER create groups named after websites, domains, or hostnames (e.g. \"YouTube\", \"Google\", \"GitHub\").\n" +
-        "- If tabs share a host but have different topics, they MUST go in different groups or be omitted.\n" +
         "- Max 2 levels. Omit unmatched tabs. No markdown, no prose."
       : "You are a tab-topic classifier. Group tabs by SEMANTIC TOPIC / user intent. NEVER by hostname, domain, or website name.\n\n" +
         "Format: {\"Topic\": [1,2], \"Other\": [3,4]}\n\n" +
-        "CRITICAL — topic vs hostname examples:\n" +
-        "WRONG (hostname-based): {\"YouTube\": [1,2,3], \"GitHub\": [4,5]}\n" +
-        "RIGHT (topic-based):    {\"Cooking\": [1], \"Gaming\": [2], \"Travel\": [3], \"Code Review\": [4], \"DevOps\": [5]}\n\n" +
+        "How to name groups — read the actual topic from each tab title, not the website or a generic category.\n\n" +
+        "Example for you to understand:\n" +
+        "Input:\n" +
+        "1. No-Knead Pan Pizza Dough Recipe  (youtube.com)\n" +
+        "2. Best Cheese for Pan Pizza  (youtube.com)\n" +
+        "3. Shibuya Tokyo Hotel Deals  (booking.com)\n" +
+        "4. Tokyo 5-Day Itinerary  (blog.travel.com)\n" +
+        "5. Minecraft Redstone Clock Tutorial  (youtube.com)\n" +
+        "6. Minecraft Observer Farm Build  (reddit.com)\n" +
+        "7. React Router v6 Migration Guide  (github.com)\n" +
+        "8. React Router Nested Routes Pattern  (github.com)\n" +
+        "9. Linux Kernel Process Scheduler Deep Dive repo (github.com)\n\n" +
+        "Output: {\"Pan Pizza\": [1,2], \"Tokyo Trip\": [3,4], \"Minecraft Redstone\": [5,6], \"React Router\": [7,8]}\n\n" +
+        "Reasoning:\n" +
+        "- [1,2] → \"Pan Pizza\": both tabs are about making pan pizza (dough and cheese). Same host (youtube.com) but grouped by the specific food topic, not the website.\n" +
+        "- [3,4] → \"Tokyo Trip\": hotel search in Shibuya and a Tokyo travel itinerary. Different hosts (booking.com, blog.travel.com) but same destination and travel goal.\n" +
+        "- [5,6] → \"Minecraft Redstone\": both tabs are about Minecraft redstone mechanics (clocks and observer farms). different host but grouped by the redstone topic.\n" +
+        "- [7,8] → \"React Router\": both tabs are about the React Router library (v6 migration and nested routes). Same host but grouped by the library/feature.\n" +
+        "- Tab 9 is omitted: it is about Linux kernel scheduling and has no partner on that topic to form a group of 2+. (same host is present but not the topic)\n\n" +
+        "Why tabs are NOT grouped differently:\n" +
+        "- Tabs 1 and 5 are both on youtube.com but one is about pizza and the other about Minecraft — completely different topics, so they MUST be separate.\n" +
+        "- Tab 4 (Tokyo itinerary) and tab 9 (Linux kernel) have no thematic overlap and are not grouped.\n" +
+        "- \"Pan Pizza\" was chosen because the specific subject is pan pizza; \"Cooking\" would be too generic. \"React Router\" was chosen because the tabs are about that library; \"Development\" would be too generic.\n\n" +
         "Rules:\n" +
-        "- NEVER create groups named after websites, domains, or hostnames (e.g. \"YouTube\", \"Google\", \"GitHub\").\n" +
+        "- Extract the specific subject/project/task from the tab title itself.\n" +
+        "- NEVER use generic buckets like Cooking, Gaming, Travel, Development, Productivity, Learning, Work.\n" +
+        "- NEVER create groups named after websites, domains, or hostnames.\n" +
         "- If tabs share a host but have different topics, they MUST go in different groups or be omitted.\n" +
-        "- Group by the user's interest/intent, not by where the content is hosted.\n" +
         "- Every tab at most once; omit unmatched tabs; reuse existing names; no markdown, no prose.";
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
@@ -595,7 +644,7 @@
         // Output is bounded roughly by (groups * ~30 chars) + tab numbers;
         // 1024 is comfortable headroom for ~100 tabs across ~20 groups.
         max_tokens: 1024,
-        temperature: 0.4,
+        temperature: 0.3,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
