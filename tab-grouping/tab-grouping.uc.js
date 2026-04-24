@@ -91,14 +91,15 @@
   };
 
   // Return the user-selected engine from the dropdown.
-  // The unified dropdown saves to zen.tidytabs.ai.group-namer;
-  // values are "none", "local", or an OpenRouter model slug.
-  // "none" disables grouping. "local" needs browser.ml.enabled.
-  // OpenRouter needs a valid model slug + API key.
+  // The engine dropdown saves to zen.tidytabs.ai.group-namer;
+  // values are "hybrid", "openrouter", "local", or "fuzzy".
+  // The OpenRouter model is a separate dropdown (zen.tidytabs.openrouter.model).
   const getSelectedEngine = () => {
     const choice = (CONFIG.GROUPING_ENGINE || "").trim().toLowerCase();
+    if (choice === "hybrid") return "hybrid";
+    if (choice === "openrouter") return isOpenRouterConfigured() ? "openrouter" : "none";
     if (choice === "local") return isAIEnabled() ? "local-ai" : "none";
-    if (OPENROUTER_MODELS[choice]) return isOpenRouterConfigured() ? "openrouter" : "none";
+    if (choice === "fuzzy") return "fuzzy";
     return "none";
   };
 
@@ -494,7 +495,7 @@
   };
 
   const isOpenRouterConfigured = () => {
-    const slug = (CONFIG.GROUPING_ENGINE || "").trim();
+    const slug = (CONFIG.OPENROUTER_MODEL || "").trim();
     if (!slug || !OPENROUTER_MODELS[slug]) return false;
     return !!(CONFIG.OPENROUTER_API_KEY || "").trim();
   };
@@ -545,7 +546,7 @@
     const validTabs = (tabs || []).filter((t) => t?.isConnected);
     if (validTabs.length < 2) return null; // nothing meaningful to cluster
 
-    const modelSlug = (CONFIG.GROUPING_ENGINE || "").trim();
+    const modelSlug = (CONFIG.OPENROUTER_MODEL || "").trim();
     const modelId = OPENROUTER_MODELS[modelSlug];
     const apiKey = (CONFIG.OPENROUTER_API_KEY || "").trim();
 
@@ -610,15 +611,20 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
 
       if (!response.ok) {
         console.warn(
-          `[TabSort][OpenRouter] HTTP ${response.status} from ${modelId}; falling back to fuzzy.`
+          `[TabSort][OpenRouter] HTTP ${response.status} from ${modelId}; body will be discarded.`
         );
         return null;
       }
 
       const json = await response.json();
       const content = json?.choices?.[0]?.message?.content || json?.choices?.[0]?.message?.reasoning;
+      console.log(`[TabSort][OpenRouter] Raw response length: ${(content || "").length} chars`);
       const parsed = parseGroupingJson(content);
-      if (!parsed) return null;
+      if (!parsed) {
+        console.warn(`[TabSort][OpenRouter] Could not parse JSON from response. Raw snippet: ${(content || "").slice(0, 200)}...`);
+        return null;
+      }
+      console.log(`[TabSort][OpenRouter] Parsed ${Object.keys(parsed).length} top-level group(s)`);
       const flatGroups = flattenNestedGroups(parsed);
       if (Object.keys(flatGroups).length === 0) return null;
 
@@ -2265,6 +2271,11 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
         return;
       }
 
+      // Reload preferences live — no browser restart needed after config changes.
+      const freshConfig = loadRuntimeConfig();
+      deriveGroupingThresholds(freshConfig);
+      Object.keys(freshConfig).forEach((k) => (CONFIG[k] = freshConfig[k]));
+
       // --- Engine selection ---
       // The dropdown controls the grouping backend. Each non-hybrid option
       // is independent: selecting "OpenRouter" never silently falls back to
@@ -2275,7 +2286,7 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
       let engineProducedGroups = false;
       let usedFuzzy = false;
       const engine = getSelectedEngine();
-      console.log(`[TabSort] Engine selected: ${engine}`);
+      console.log(`[TabSort] Engine mode: ${engine}`);
 
       if (engine === "none") {
         console.warn(
@@ -2285,47 +2296,63 @@ Output: raw JSON only. No markdown, no prose, no explanation.`;
         return;
       }
 
-      // ----- OpenRouter -----
-      if (engine === "openrouter") {
+      const hasGroups = (g) => g && Object.keys(g).length > 0;
+
+      // ----- OpenRouter (hybrid or direct) -----
+      if ((engine === "hybrid" || engine === "openrouter") && isOpenRouterConfigured()) {
         console.log(
-          "[TabSort] Using OpenRouter full-grouping for",
-          initialTabsToSort.length,
-          "tabs"
+          `[TabSort] Trying OpenRouter (model: ${CONFIG.OPENROUTER_MODEL}) for ${initialTabsToSort.length} tabs`
         );
         const remoteGroups = await askOpenRouterForGroups(
           initialTabsToSort,
           allExistingGroupNames,
           useFolders
         );
-        if (remoteGroups && Object.keys(remoteGroups).length > 0) {
+        if (hasGroups(remoteGroups)) {
           finalGroups = consolidateSimilarGroupNames(
             remoteGroups,
             allExistingGroupNames
           );
           engineProducedGroups = true;
+          console.log(`[TabSort] OpenRouter produced ${Object.keys(finalGroups).length} group(s)`);
+        } else {
+          console.warn(`[TabSort] OpenRouter returned empty/invalid groups`);
+        }
+      } else if (engine === "openrouter") {
+        console.warn(`[TabSort] OpenRouter selected but not configured (missing API key or model)`);
+      }
+
+      // ----- Local AI (hybrid fallback, or direct) -----
+      if (!engineProducedGroups && (engine === "hybrid" || engine === "local-ai")) {
+        if (isAIEnabled()) {
+          console.log(`[TabSort] Trying Local AI for ${initialTabsToSort.length} tabs`);
+          aiTabTopics = await askAIForMultipleTopics(initialTabsToSort);
+          if (aiTabTopics.length > 0) {
+            aiTabTopics.forEach(({ tab, topic }) => {
+              if (!topic || topic === "Uncategorized" || !tab || !tab.isConnected) return;
+              if (!finalGroups[topic]) finalGroups[topic] = [];
+              finalGroups[topic].push(tab);
+            });
+            finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
+            engineProducedGroups = hasGroups(finalGroups);
+            console.log(`[TabSort] Local AI returned ${aiTabTopics.length} topics, produced ${Object.keys(finalGroups).length} group(s)`);
+          } else {
+            console.warn(`[TabSort] Local AI returned no topics`);
+          }
+        } else if (engine === "local-ai") {
+          console.warn(`[TabSort] Local AI selected but browser.ml.enabled is off`);
+        } else {
+          console.warn(`[TabSort] Local AI unavailable (browser.ml.enabled off), falling back`);
         }
       }
 
-      // ----- Local AI -----
-      if (engine === "local-ai" && isAIEnabled()) {
-        console.log(
-          "[TabSort] Using local AI grouping for",
-          initialTabsToSort.length,
-          "tabs"
-        );
-        aiTabTopics = await askAIForMultipleTopics(initialTabsToSort);
-        console.log(
-          "[TabSort] AI returned",
-          aiTabTopics.length,
-          "tab-topic pairs"
-        );
-        aiTabTopics.forEach(({ tab, topic }) => {
-          if (!topic || topic === "Uncategorized" || !tab || !tab.isConnected) return;
-          if (!finalGroups[topic]) finalGroups[topic] = [];
-          finalGroups[topic].push(tab);
-        });
-        finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
-        engineProducedGroups = aiTabTopics.length > 0;
+      // ----- Fuzzy (hybrid fallback, or direct) -----
+      if (!engineProducedGroups && (engine === "hybrid" || engine === "fuzzy")) {
+        console.log(`[TabSort] Trying Fuzzy grouping for ${initialTabsToSort.length} tabs`);
+        finalGroups = fuzzyGroupByTokens(initialTabsToSort, allExistingGroupNames);
+        usedFuzzy = true;
+        engineProducedGroups = hasGroups(finalGroups);
+        console.log(`[TabSort] Fuzzy produced ${Object.keys(finalGroups).length} group(s)`);
       }
 
       // --- Rescue ungrouped tabs ---

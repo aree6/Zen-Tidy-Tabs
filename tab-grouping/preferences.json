@@ -18,14 +18,25 @@
       "label": "Grouping engine",
       "type": "dropdown",
       "disabledOn": [],
-      "defaultValue": "local",
+      "defaultValue": "hybrid",
       "options": [
-        { "label": "None (disable grouping)", "value": "none" },
-        { "label": "Local — Firefox ML (default, offline)", "value": "local" },
-        { "label": "OpenRouter — Ling-2.6 Flash (fastest)", "value": "ling-flash" },
-        { "label": "OpenRouter — Llama 3.3 70B (most accurate)", "value": "llama33-70b" },
-        { "label": "OpenRouter — Gemma 3 27B (balanced)", "value": "gemma3-27b" },
-        { "label": "OpenRouter — GLM 4.5 Air (balanced)", "value": "glm-air" }
+        { "label": "Hybrid (OpenRouter → Local AI → Fuzzy)", "value": "hybrid" },
+        { "label": "OpenRouter (remote LLM only)", "value": "openrouter" },
+        { "label": "Local AI — Firefox ML (on-device)", "value": "local" },
+        { "label": "Fuzzy (deterministic only)", "value": "fuzzy" }
+      ]
+    },
+    {
+      "property": "zen.tidytabs.openrouter.model",
+      "label": "OpenRouter model",
+      "type": "dropdown",
+      "disabledOn": [],
+      "defaultValue": "ling-flash",
+      "options": [
+        { "label": "Ling-2.6 Flash (fastest)", "value": "ling-flash" },
+        { "label": "GLM 4.5 Air (balanced)", "value": "glm-air" },
+        { "label": "Llama 3.3 70B (most accurate)", "value": "llama33-70b" },
+        { "label": "Gemma 3 27B (balanced)", "value": "gemma3-27b" }
       ]
     },
     {
