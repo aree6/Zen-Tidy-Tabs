@@ -122,11 +122,15 @@
 }
 
 @media (-moz-bool-pref: "zen.tabs.active-border-enabled") {
+  /* Explicitly clear border on all tabs first, then apply to selected only.
+     This prevents any leftover border state from painting during tab switch. */
+  .tabbrowser-tab:not([selected]):not([visuallyselected]) .tab-stack .tab-background {
+    border: none !important;
+  }
   .tabbrowser-tab[selected] .tab-stack .tab-background,
   .tabbrowser-tab[visuallyselected] .tab-stack .tab-background {
     border: var(--zen-tabs-active-border-width, 0.1rem) solid var(--bzt-active-border) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: none !important;
   }
 }
 
@@ -161,12 +165,12 @@ tab-group[split-view-group] .tabbrowser-tab {
    Revealed and styled only when separator-enabled is checked.
    ------------------------------------------------------------------ */
 
-.vertical-pinned-tabs-container-separator {
+.pinned-tabs-container-separator {
   display: none !important;
 }
 
 @media (-moz-bool-pref: "zen.tabs.separator-enabled") {
-  .vertical-pinned-tabs-container-separator {
+  .pinned-tabs-container-separator {
     display: block !important;
     border: none !important;
     border-top: var(--zen-tabs-separator-thickness, 1px) solid var(--bzt-separator) !important;
