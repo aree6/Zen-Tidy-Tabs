@@ -90,6 +90,13 @@
    LAYER 2 — TAB STYLING
    ============================================================================ */
 
+/* Suppress all tab background transitions globally.
+   Without this, tabs that lose [selected] animate their border/bg away,
+   causing a visible flash on every tab switch. */
+.tabbrowser-tab .tab-stack .tab-background {
+  transition: none !important;
+}
+
 /* ------------------------------------------------------------------
    PINNED TABS — subtle tint, no border
    ------------------------------------------------------------------ */
@@ -98,7 +105,6 @@
   .tabbrowser-tab[pinned]:not([zen-essential]) .tab-stack .tab-background {
     background-color: var(--bzt-pinned-bg) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: background-color 0.2s ease !important;
   }
 }
 
@@ -151,11 +157,18 @@ tab-group[split-view-group] .tabbrowser-tab {
 
 /* ------------------------------------------------------------------
    SEPARATOR between pinned/essential and normal tabs
-   Hidden by default; enable to show with configurable style.
+   Hidden unconditionally first — the browser shows it by default.
+   Revealed and styled only when separator-enabled is checked.
    ------------------------------------------------------------------ */
+
+.vertical-pinned-tabs-container-separator {
+  display: none !important;
+}
 
 @media (-moz-bool-pref: "zen.tabs.separator-enabled") {
   .vertical-pinned-tabs-container-separator {
+    display: block !important;
+    border: none !important;
     border-top: var(--zen-tabs-separator-thickness, 1px) solid var(--bzt-separator) !important;
     margin-block: var(--zen-tabs-separator-margin, 4px) !important;
     height: 0 !important;
