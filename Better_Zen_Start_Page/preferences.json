@@ -14,8 +14,15 @@
         "defaultValue": true
     },
     {
-        "property": "zen.fix.tabs",
-        "label": "Transparent Tabs & Dot Indicator",
+        "property": "zen.fix.transparent-tabs",
+        "label": "Transparent Essential Tabs",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.tab-dot-indicator",
+        "label": "Dot Indicator on Essential Tabs",
         "type": "checkbox",
         "disabledOn": [],
         "defaultValue": false
@@ -28,8 +35,15 @@
         "defaultValue": false
     },
     {
-        "property": "zen.fix.cleanui",
-        "label": "Clean UI & No Bookmarks",
+        "property": "zen.fix.hide-bookmarks",
+        "label": "Hide Bookmarks Bar",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.clean-pinned-tabs",
+        "label": "Transparent Background on Pinned Tabs",
         "type": "checkbox",
         "disabledOn": [],
         "defaultValue": false
@@ -69,25 +83,136 @@
         "disabledOn": [],
         "defaultValue": false
     },
+
+    {
+        "property": "zen.fix.tab-borders.radius",
+        "label": "Border radius — all tabs (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "8px"
+    },
+
     {
         "property": "zen.fix.tab-borders.color",
-        "label": "Tab border color (CSS color value)",
+        "label": "Default tab border color",
         "type": "string",
         "disabledOn": [],
         "defaultValue": "rgba(128,128,128,0.25)"
     },
     {
         "property": "zen.fix.tab-borders.width",
-        "label": "Tab border width (px or CSS unit)",
+        "label": "Default tab border thickness (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "1px"
+    },
+
+    {
+        "property": "zen.fix.tab-borders.hover-color",
+        "label": "Hovered tab border color",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "rgba(128,128,128,0.45)"
+    },
+    {
+        "property": "zen.fix.tab-borders.hover-width",
+        "label": "Hovered tab border thickness (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "1px"
+    },
+
+    {
+        "property": "zen.fix.tab-borders.pinned-enabled",
+        "label": "Override border for pinned tabs",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.tab-borders.pinned-color",
+        "label": "Pinned tab border color",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "rgba(0,0,0,0.15)"
+    },
+    {
+        "property": "zen.fix.tab-borders.pinned-width",
+        "label": "Pinned tab border thickness (px or CSS unit)",
         "type": "string",
         "disabledOn": [],
         "defaultValue": "1px"
     },
     {
-        "property": "zen.fix.tab-borders.radius",
-        "label": "Tab border radius (px or CSS unit)",
+        "property": "zen.fix.tab-borders.pinned-hover-color",
+        "label": "Pinned tab border color on hover",
         "type": "string",
         "disabledOn": [],
-        "defaultValue": "8px"
+        "defaultValue": "rgba(0,0,0,0.3)"
+    },
+    {
+        "property": "zen.fix.tab-borders.pinned-hover-width",
+        "label": "Pinned tab border thickness on hover (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "1px"
+    },
+
+    {
+        "property": "zen.fix.tab-borders.essential-enabled",
+        "label": "Override border for essential tabs",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.tab-borders.essential-color",
+        "label": "Essential tab border color",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "rgba(0,0,0,0.15)"
+    },
+    {
+        "property": "zen.fix.tab-borders.essential-width",
+        "label": "Essential tab border thickness (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "1px"
+    },
+    {
+        "property": "zen.fix.tab-borders.essential-hover-color",
+        "label": "Essential tab border color on hover",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "rgba(0,0,0,0.3)"
+    },
+    {
+        "property": "zen.fix.tab-borders.essential-hover-width",
+        "label": "Essential tab border thickness on hover (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "1px"
+    },
+
+    {
+        "property": "zen.fix.tab-borders.active-enabled",
+        "label": "Override border for active (selected) tab",
+        "type": "checkbox",
+        "disabledOn": [],
+        "defaultValue": false
+    },
+    {
+        "property": "zen.fix.tab-borders.active-color",
+        "label": "Active tab border color",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "rgba(0,0,0,0.1)"
+    },
+    {
+        "property": "zen.fix.tab-borders.active-width",
+        "label": "Active tab border thickness (px or CSS unit)",
+        "type": "string",
+        "disabledOn": [],
+        "defaultValue": "1px"
     }
 ]
