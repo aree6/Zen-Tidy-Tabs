@@ -62,6 +62,7 @@
     SHOW_GROUP_BUTTON: true,
     SHOW_UNGROUP_BUTTON: true,
     SEPARATOR_LINE_MODE: "hidden",        // "always" | "hover" | "hidden"
+    SEPARATOR_LINE_MARGIN: 4,            // margin top/bottom in pixels
     // Subtle group/folder background and label tint from favicon colors
     ENABLE_GROUP_BG_TINT: false,
     ENABLE_GROUP_LABEL_TINT: false,
@@ -151,6 +152,7 @@
     SHOW_GROUP_BUTTON: ["bool", "ui.show-group-button"],
     SHOW_UNGROUP_BUTTON: ["bool", "ui.show-ungroup-button"],
     SEPARATOR_LINE_MODE: ["string", "ui.separator-line-mode"],
+    SEPARATOR_LINE_MARGIN: ["double", "ui.separator-line-margin"],
     ENABLE_GROUP_BG_TINT: ["bool", "ui.enable-group-bg-tint"],
     ENABLE_GROUP_LABEL_TINT: ["bool", "ui.enable-group-label-tint"],
     ENABLE_FOLDER_TINT: ["bool", "ui.enable-folder-tint"],
@@ -2811,6 +2813,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     const style = CONFIG.INLINE_BUTTON_STYLE || "text";
     const iconSize = Math.max(12, Math.min(32, Number(CONFIG.INLINE_ICON_SIZE) || 18));
     const lineMode = CONFIG.SEPARATOR_LINE_MODE || "hover";
+    const lineMargin = Math.max(0, Math.min(20, Number(CONFIG.SEPARATOR_LINE_MARGIN) || 4));
 
     for (const sep of separators) {
       if (!sep?.isConnected) continue;
@@ -2820,6 +2823,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       const existing = sep.querySelector(".tidy-tabs-button-container");
       if (existing) existing.remove();
       sep.style.setProperty("--tidy-tabs-inline-icon-size", `${iconSize}px`);
+      sep.style.setProperty("--tidy-tabs-line-margin", `${lineMargin}px`);
 
       const linePath = sep.querySelector("#separator-path");
       const lineSvg = linePath?.closest?.("svg");
@@ -2870,6 +2874,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         line.classList.remove("tidy-tabs-separator-line");
       });
       sep.style.removeProperty("--tidy-tabs-inline-icon-size");
+      sep.style.removeProperty("--tidy-tabs-line-margin");
     });
   };
 
@@ -2927,7 +2932,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
     // ungroup
     ungroup:
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8a2 2 0 0 1 2-2h3"/><path d="M17 16a2 2 0 0 1-2 2h-3"/><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`,
   };
 
   // Pick a stroke color that reads well on the current menu background.
