@@ -1,0 +1,252 @@
+[
+  {
+    "type": "text",
+    "label": "🗂️ Tab Behaviour",
+    "margin": "30px 0 30px 0",
+    "size": "20px"
+  },
+
+    {
+      "type": "separator",
+      "label": "👁️ Visibility",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.transparent-essential-tabs",
+        "label": "Transparent background on idle essential tabs"
+      },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.dot-indicator",
+        "label": "Dot indicator beneath essential tabs"
+      },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.transparent-pinned-tabs",
+        "label": "Transparent background on pinned tabs"
+      },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.pending-dim",
+        "label": "Dim unloaded (pending) tabs"
+      },
+
+    {
+      "type": "separator",
+      "label": "🔲 Essentials Grid",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.essentials-grid",
+        "label": "Grid layout for essential tabs"
+      },
+
+  {
+    "type": "separator",
+    "label": "",
+    "margin": "15px 0 15px 0"
+  },
+
+  {
+    "type": "text",
+    "label": "🖼️ Tab Borders",
+    "margin": "15px 0 30px 0",
+    "size": "20px"
+  },
+
+    {
+      "type": "separator",
+      "label": "⚙️ Global",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.borders-enabled",
+        "label": "Enable tab borders"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-radius",
+        "label": "Border radius — all tabs",
+        "defaultValue": "8px",
+        "placeholder": "e.g. 8px"
+      },
+
+    {
+      "type": "separator",
+      "label": "🗒️ Normal Tabs",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-color",
+        "label": "Normal tab border color",
+        "defaultValue": "rgba(128,128,128,0.25)",
+        "placeholder": "e.g. rgba(128,128,128,0.25)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-width",
+        "label": "Normal tab border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-hover-color",
+        "label": "Normal tab border color on hover",
+        "defaultValue": "rgba(128,128,128,0.45)",
+        "placeholder": "e.g. rgba(128,128,128,0.45)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-hover-width",
+        "label": "Normal tab border thickness on hover",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+
+    {
+      "type": "separator",
+      "label": "📌 Pinned Tabs",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.borders-pinned-enabled",
+        "label": "Override borders for pinned tabs"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-pinned-color",
+        "label": "Pinned tab border color",
+        "defaultValue": "rgba(0,0,0,0.15)",
+        "placeholder": "e.g. rgba(0,0,0,0.15)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-pinned-width",
+        "label": "Pinned tab border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-pinned-hover-color",
+        "label": "Pinned tab border color on hover",
+        "defaultValue": "rgba(0,0,0,0.3)",
+        "placeholder": "e.g. rgba(0,0,0,0.3)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-pinned-hover-width",
+        "label": "Pinned tab border thickness on hover",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+
+    {
+      "type": "separator",
+      "label": "⭐ Essential Tabs",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.borders-essential-enabled",
+        "label": "Override borders for essential tabs"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-essential-color",
+        "label": "Essential tab border color",
+        "defaultValue": "rgba(0,0,0,0.15)",
+        "placeholder": "e.g. rgba(0,0,0,0.15)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-essential-width",
+        "label": "Essential tab border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-essential-hover-color",
+        "label": "Essential tab border color on hover",
+        "defaultValue": "rgba(0,0,0,0.3)",
+        "placeholder": "e.g. rgba(0,0,0,0.3)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-essential-hover-width",
+        "label": "Essential tab border thickness on hover",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+
+    {
+      "type": "separator",
+      "label": "🔀 Split Tabs",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.borders-split-enabled",
+        "label": "Override borders for split tabs"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-split-color",
+        "label": "Split tab border color",
+        "defaultValue": "rgba(0,0,0,0.15)",
+        "placeholder": "e.g. rgba(0,0,0,0.15)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-split-width",
+        "label": "Split tab border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-split-hover-color",
+        "label": "Split tab border color on hover",
+        "defaultValue": "rgba(0,0,0,0.3)",
+        "placeholder": "e.g. rgba(0,0,0,0.3)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-split-hover-width",
+        "label": "Split tab border thickness on hover",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+
+    {
+      "type": "separator",
+      "label": "✅ Active Tab",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.borders-active-enabled",
+        "label": "Override border for active (selected) tab"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-active-color",
+        "label": "Active tab border color",
+        "defaultValue": "rgba(0,0,0,0.1)",
+        "placeholder": "e.g. rgba(0,0,0,0.1)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.borders-active-width",
+        "label": "Active tab border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      }
+]

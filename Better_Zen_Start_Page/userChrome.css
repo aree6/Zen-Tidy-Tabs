@@ -9,9 +9,6 @@
 /* --- Light Mode Variables --- */
 --translucent-gradient-start: rgba(0, 0, 0, 0.1);
 --translucent-gradient-mid: rgba(0, 0, 0, 0.025);
---essential-bubble-indicator: black;
---pending-tab-shadow-color: transparent;
---outline-color: transparent;
 /* The Fade Background */
 --zen-fade-bg: linear-gradient(
     to right,
@@ -38,9 +35,6 @@ transparent 100%
 /* --- Dark Mode Variables --- */
 --translucent-gradient-start: rgba(0, 0, 0, 0.15);
 --translucent-gradient-mid: rgba(0, 0, 0, 0.03);
---essential-bubble-indicator: white;
---pending-tab-shadow-color: rgba(0, 0, 0, 0.7);
---outline-color: #222222;
 --zen-fade-bg: linear-gradient(
       to right,
 var(--translucent-gradient-start) 0%,
@@ -97,46 +91,6 @@ background-image: var(--zen-logo-static), var(--zen-fade-bg) !important;
 display: none !important;
   }
 }
-/* --- OPTIONAL: TRANSPARENT ESSENTIAL TABS (Default: OFF) --- */
-@media (-moz-bool-pref: "zen.fix.transparent-tabs") {
-.tabbrowser-tab[zen-essential="true"]:not(:hover):not([selected="true"]) .tab-stack .tab-background {
-background-color: transparent !important;
-  }
-}
-/* --- OPTIONAL: DOT INDICATOR ON ESSENTIAL TABS (Default: OFF) --- */
-@media (-moz-bool-pref: "zen.fix.tab-dot-indicator") {
-  tab[zen-essential="true"] { position: relative; }
-  tab[zen-essential="true"]:not([selected="true"])::after {
-content: "";
-position: absolute;
-bottom: 0.25em;
-left: 50%;
-transform: translateX(-50%) scale(0);
-width: 0.19em;
-height: 0.19em;
-background-color: var(--essential-bubble-indicator);
-border-radius: 50%;
-pointer-events: none;
-z-index: 10;
-transition: transform 0.3s ease, opacity 0.3s ease;
-opacity: 0;
-  }
-  tab[zen-essential="true"]:not([pending="true"])::after {
-transform: translateX(-50%) scale(1);
-opacity: 1;
-z-index: 9999999999 !important;
-  }
-}
-/* --- OPTIONAL: PENDING TAB STATUS (Default: OFF) --- */
-@media (-moz-bool-pref: "zen.fix.pending") {
-.tabbrowser-tab[pending="true"] .tab-label::before {
-content: "🌙 ";
-  }
-.tabbrowser-tab[pending="true"] {
-filter: brightness(0.6);
-text-shadow: 0 0 0.03em var(--pending-tab-shadow-color);
-  }
-}
 /* --- OPTIONAL: HIDE BOOKMARKS BAR (Default: OFF) --- */
 @media (-moz-bool-pref: "zen.fix.hide-bookmarks") {
 #PersonalToolbar {
@@ -144,77 +98,5 @@ display: none !important;
 height: 0 !important;
 margin: 0 !important;
 padding: 0 !important;
-  }
-}
-/* --- OPTIONAL: TRANSPARENT BACKGROUND ON PINNED TABS (Default: OFF) --- */
-@media (-moz-bool-pref: "zen.fix.clean-pinned-tabs") {
-.tab-background:is([selected], [multiselected]) {
-outline-color: var(--outline-color) !important;
-border-radius: 1rem;
-  }
-.tabbrowser-tab[pinned]:not([zen-essential="true"]) .tab-stack .tab-background {
-background-color: transparent !important;
-  }
-}
-/* --- OPTIONAL: ESSENTIALS GRID (Default: OFF) --- */
-@media (-moz-bool-pref: "zen.fix.essentials") {
-.zen-essentials-container {
-grid-template-columns: repeat(auto-fit, minmax(2.50em, auto)) !important;
-  }
-.zen-essentials-container > tab > stack:nth-child(1) > hbox:nth-child(2) > stack:nth-child(2) > img:nth-child(3) {
-transform: scale(1.8) !important;
-margin: 0 !important;
-padding: 0 !important;
-  }
-}
-/* --- OPTIONAL: CUSTOM TAB BORDERS (Default: OFF) --- */
-/*
- * String prefs are auto-injected by Zen as CSS variables at :root.
- * Dots in property names become hyphens, so:
- *   zen.fix.tab-borders.color  →  var(--zen-fix-tab-borders-color)
- *   zen.fix.tab-borders.radius →  var(--zen-fix-tab-borders-radius)
- * No manual :root block needed — values update live without a restart.
- */
-@media (-moz-bool-pref: "zen.fix.tab-borders.enabled") {
-  /* Default state — all tabs */
-  .tabbrowser-tab .tab-stack .tab-background {
-    border: var(--zen-fix-tab-borders-width) solid var(--zen-fix-tab-borders-color) !important;
-    border-radius: var(--zen-fix-tab-borders-radius) !important;
-  }
-  /* Hover state — all tabs */
-  .tabbrowser-tab:hover .tab-stack .tab-background {
-    border: var(--zen-fix-tab-borders-hover-width) solid var(--zen-fix-tab-borders-hover-color) !important;
-  }
-}
-/* --- OPTIONAL: PINNED TAB BORDER OVERRIDE (Default: OFF) --- */
-@media (-moz-bool-pref: "zen.fix.tab-borders.pinned-enabled") {
-  /* Pinned tabs — idle */
-  .tabbrowser-tab[pinned]:not([zen-essential="true"]) .tab-stack .tab-background {
-    border: var(--zen-fix-tab-borders-pinned-width) solid var(--zen-fix-tab-borders-pinned-color) !important;
-    border-radius: var(--zen-fix-tab-borders-radius) !important;
-  }
-  /* Pinned tabs — hover */
-  .tabbrowser-tab[pinned]:not([zen-essential="true"]):hover .tab-stack .tab-background {
-    border: var(--zen-fix-tab-borders-pinned-hover-width) solid var(--zen-fix-tab-borders-pinned-hover-color) !important;
-  }
-}
-/* --- OPTIONAL: ESSENTIAL TAB BORDER OVERRIDE (Default: OFF) --- */
-@media (-moz-bool-pref: "zen.fix.tab-borders.essential-enabled") {
-  /* Essential tabs — idle */
-  .tabbrowser-tab[zen-essential="true"] .tab-stack .tab-background {
-    border: var(--zen-fix-tab-borders-essential-width) solid var(--zen-fix-tab-borders-essential-color) !important;
-    border-radius: var(--zen-fix-tab-borders-radius) !important;
-  }
-  /* Essential tabs — hover */
-  .tabbrowser-tab[zen-essential="true"]:hover .tab-stack .tab-background {
-    border: var(--zen-fix-tab-borders-essential-hover-width) solid var(--zen-fix-tab-borders-essential-hover-color) !important;
-  }
-}
-/* --- OPTIONAL: ACTIVE TAB BORDER OVERRIDE (Default: OFF) --- */
-@media (-moz-bool-pref: "zen.fix.tab-borders.active-enabled") {
-  /* Active (selected) tab */
-  .tabbrowser-tab[selected] .tab-stack .tab-background {
-    border: var(--zen-fix-tab-borders-active-width) solid var(--zen-fix-tab-borders-active-color) !important;
-    border-radius: var(--zen-fix-tab-borders-radius) !important;
   }
 }

@@ -1,0 +1,146 @@
+/*
+ * ============================================================================
+ * BETTER ZEN TABS
+ * ============================================================================
+ * Granular tab border and behaviour styling.
+ *
+ * String preferences are auto-injected by Zen as CSS variables at :root.
+ * Dots in property names become hyphens, so:
+ *   zen.tabs.borders-color  →  var(--zen-tabs-borders-color)
+ *   zen.tabs.borders-radius →  var(--zen-tabs-borders-radius)
+ * Values update live without a browser restart.
+ * ============================================================================
+ */
+
+/* ============================================================================
+   SECTION 1 — TAB BEHAVIOUR
+   ============================================================================ */
+
+/* --- Transparent background on idle essential tabs --- */
+@media (-moz-bool-pref: "zen.tabs.transparent-essential-tabs") {
+  .tabbrowser-tab[zen-essential="true"]:not(:hover):not([selected]) .tab-stack .tab-background {
+    background-color: transparent !important;
+  }
+}
+
+/* --- Dot indicator beneath essential tabs --- */
+@media (-moz-bool-pref: "zen.tabs.dot-indicator") {
+  tab[zen-essential="true"] {
+    position: relative;
+  }
+  tab[zen-essential="true"]:not([selected])::after {
+    content: "";
+    position: absolute;
+    bottom: 0.25em;
+    left: 50%;
+    transform: translateX(-50%) scale(0);
+    width: 0.19em;
+    height: 0.19em;
+    background-color: var(--essential-bubble-indicator, currentColor);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 10;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    opacity: 0;
+  }
+  tab[zen-essential="true"]:not([pending])::after {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+    z-index: 9999999999 !important;
+  }
+}
+
+/* --- Transparent background on pinned tabs --- */
+@media (-moz-bool-pref: "zen.tabs.transparent-pinned-tabs") {
+  .tabbrowser-tab[pinned]:not([zen-essential="true"]) .tab-stack .tab-background {
+    background-color: transparent !important;
+  }
+}
+
+/* --- Dim unloaded (pending) tabs --- */
+@media (-moz-bool-pref: "zen.tabs.pending-dim") {
+  .tabbrowser-tab[pending] .tab-label::before {
+    content: "🌙 ";
+  }
+  .tabbrowser-tab[pending] {
+    filter: brightness(0.6);
+  }
+}
+
+/* --- Grid layout for essential tabs --- */
+@media (-moz-bool-pref: "zen.tabs.essentials-grid") {
+  .zen-essentials-container {
+    grid-template-columns: repeat(auto-fit, minmax(2.50em, auto)) !important;
+  }
+  .zen-essentials-container > tab > stack:nth-child(1) > hbox:nth-child(2) > stack:nth-child(2) > img:nth-child(3) {
+    transform: scale(1.8) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+
+/* ============================================================================
+   SECTION 2 — TAB BORDERS
+   General rules first, then overrides per tab type in order of specificity.
+   ============================================================================ */
+
+/* --- Global border enable + Normal tabs (idle + hover) --- */
+@media (-moz-bool-pref: "zen.tabs.borders-enabled") {
+  /* Normal tabs — idle */
+  .tabbrowser-tab .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-width) solid var(--zen-tabs-borders-color) !important;
+    border-radius: var(--zen-tabs-borders-radius) !important;
+  }
+  /* Normal tabs — hover */
+  .tabbrowser-tab:hover .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-hover-width) solid var(--zen-tabs-borders-hover-color) !important;
+  }
+}
+
+/* --- Pinned tab border override --- */
+@media (-moz-bool-pref: "zen.tabs.borders-pinned-enabled") {
+  /* Pinned tabs — idle */
+  .tabbrowser-tab[pinned]:not([zen-essential="true"]) .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-pinned-width) solid var(--zen-tabs-borders-pinned-color) !important;
+    border-radius: var(--zen-tabs-borders-radius) !important;
+  }
+  /* Pinned tabs — hover */
+  .tabbrowser-tab[pinned]:not([zen-essential="true"]):hover .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-pinned-hover-width) solid var(--zen-tabs-borders-pinned-hover-color) !important;
+  }
+}
+
+/* --- Essential tab border override --- */
+@media (-moz-bool-pref: "zen.tabs.borders-essential-enabled") {
+  /* Essential tabs — idle */
+  .tabbrowser-tab[zen-essential="true"] .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-essential-width) solid var(--zen-tabs-borders-essential-color) !important;
+    border-radius: var(--zen-tabs-borders-radius) !important;
+  }
+  /* Essential tabs — hover */
+  .tabbrowser-tab[zen-essential="true"]:hover .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-essential-hover-width) solid var(--zen-tabs-borders-essential-hover-color) !important;
+  }
+}
+
+/* --- Split tab border override --- */
+@media (-moz-bool-pref: "zen.tabs.borders-split-enabled") {
+  /* Split tabs — idle */
+  .tabbrowser-tab[zen-split="true"] .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-split-width) solid var(--zen-tabs-borders-split-color) !important;
+    border-radius: var(--zen-tabs-borders-radius) !important;
+  }
+  /* Split tabs — hover */
+  .tabbrowser-tab[zen-split="true"]:hover .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-split-hover-width) solid var(--zen-tabs-borders-split-hover-color) !important;
+  }
+}
+
+/* --- Active (selected) tab border override --- */
+@media (-moz-bool-pref: "zen.tabs.borders-active-enabled") {
+  /* Active tab — overrides all type-specific idle rules above */
+  .tabbrowser-tab[selected] .tab-stack .tab-background {
+    border: var(--zen-tabs-borders-active-width) solid var(--zen-tabs-borders-active-color) !important;
+    border-radius: var(--zen-tabs-borders-radius) !important;
+  }
+}
