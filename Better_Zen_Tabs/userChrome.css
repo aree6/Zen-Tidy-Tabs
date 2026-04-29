@@ -67,9 +67,10 @@
 /* --- Dim unloaded (pending) tabs --- */
 @media (-moz-bool-pref: "zen.tabs.pending-dim") {
   .tabbrowser-tab[pending] .tab-label::before {
-    content: var(--zen-tabs-pending-emoji, "🌙");
+    content: "💤";
+    display: inline-block;
     margin-inline-end: 0.3em;
-    scale: var(--zen-tabs-pending-emoji-scale, 0.8);
+    transform: scale(var(--zen-tabs-pending-emoji-scale, 0.8));
   }
   @media (-moz-bool-pref: "zen.tabs.pending-emoji-grayscale") {
     .tabbrowser-tab[pending] .tab-label::before {
