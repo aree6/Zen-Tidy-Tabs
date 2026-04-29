@@ -67,7 +67,7 @@
 /* --- Dim unloaded (pending) tabs --- */
 @media (-moz-bool-pref: "zen.tabs.pending-dim") {
   .tabbrowser-tab[pending] .tab-label::before {
-    content: "💤";
+    content: "🌙";
     display: inline-block;
     margin-inline-end: 0.3em;
     transform: scale(var(--zen-tabs-pending-emoji-scale, 1));
@@ -130,14 +130,11 @@
 }
 
 @media (-moz-bool-pref: "zen.tabs.active-border-enabled") {
-  /* Explicitly clear border on all tabs first, then apply to selected only.
-     This prevents any leftover border state from painting during tab switch. */
-  .tabbrowser-tab:not([selected]):not([visuallyselected]) .tab-stack .tab-background {
-    border: none !important;
-  }
+  /* Use inset box-shadow instead of border. Zero layout conflicts with other
+     mods / Zen defaults, and no flash during tab switch. */
   .tabbrowser-tab[selected] .tab-stack .tab-background,
   .tabbrowser-tab[visuallyselected] .tab-stack .tab-background {
-    border: var(--zen-tabs-active-border-width, 0.1rem) solid var(--bzt-active-border) !important;
+    box-shadow: inset 0 0 0 var(--zen-tabs-active-border-width, 0.1rem) var(--bzt-active-border) !important;
     border-radius: var(--bzt-radius) !important;
   }
 }
@@ -169,20 +166,27 @@ tab-group[split-view-group] .tabbrowser-tab {
 
 /* ------------------------------------------------------------------
    SEPARATOR between pinned/essential and normal tabs
-   Hidden unconditionally first — the browser shows it by default.
-   Revealed and styled only when separator-enabled is checked.
+   Uses border-bottom on the pinned container itself — always exists in DOM.
+   Any stale separator elements are hidden first so they don't stack.
    ------------------------------------------------------------------ */
 
-.pinned-tabs-container-separator {
+.pinned-tabs-container-separator,
+.vertical-pinned-tabs-container-separator {
   display: none !important;
 }
 
+/* Disabled state: remove any bottom border / spacing so nothing shows */
+#vertical-pinned-tabs-container {
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Enabled state: draw separator + spacing */
 @media (-moz-bool-pref: "zen.tabs.separator-enabled") {
-  .pinned-tabs-container-separator {
-    display: block !important;
-    border: none !important;
-    border-top: var(--zen-tabs-separator-thickness, 1px) solid var(--bzt-separator) !important;
-    margin-block: var(--zen-tabs-separator-margin, 4px) !important;
-    height: 0 !important;
+  #vertical-pinned-tabs-container {
+    border-bottom: var(--zen-tabs-separator-thickness, 1px) solid var(--bzt-separator) !important;
+    padding-bottom: var(--zen-tabs-separator-margin-top, 4px) !important;
+    margin-bottom: var(--zen-tabs-separator-margin-bottom, 4px) !important;
   }
 }

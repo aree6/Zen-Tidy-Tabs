@@ -259,8 +259,15 @@
       },
       {
         "type": "string",
-        "property": "zen.tabs.separator-margin",
-        "label": "Separator vertical margin",
+        "property": "zen.tabs.separator-margin-top",
+        "label": "Spacing above separator (padding-bottom on pinned container)",
+        "defaultValue": "4px",
+        "placeholder": "e.g. 4px"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.separator-margin-bottom",
+        "label": "Spacing below separator (margin-bottom on pinned container)",
         "defaultValue": "4px",
         "placeholder": "e.g. 4px"
       }
