@@ -54,20 +54,6 @@
         "placeholder": "e.g. 100%"
       },
       {
-        "type": "string",
-        "property": "zen.tabs.pending-icon-color",
-        "label": "Icon color",
-        "defaultValue": "currentColor",
-        "placeholder": "e.g. currentColor, #ff0000"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pending-icon-size",
-        "label": "Icon size",
-        "defaultValue": "1em",
-        "placeholder": "e.g. 1em"
-      },
-      {
         "type": "checkbox",
         "property": "zen.tabs.essentials-grid",
         "label": "Grid layout for essential tabs"
