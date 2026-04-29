@@ -204,7 +204,7 @@
   .tabbrowser-tab[visuallyselected] .tab-stack .tab-background {
     background-color: var(--bzt-active-bg) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: background-color 0.2s ease !important;
+    transition: none !important;
   }
 }
 
@@ -213,7 +213,7 @@
   .tabbrowser-tab[visuallyselected] .tab-stack .tab-background {
     border: var(--zen-tabs-active-border-width, 1px) solid var(--bzt-active-border) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
+    transition: none !important;
   }
 }
 
