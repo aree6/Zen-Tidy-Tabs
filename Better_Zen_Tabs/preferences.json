@@ -21,6 +21,31 @@
         "property": "zen.tabs.pending-dim",
         "label": "Dim unloaded (pending) tabs"
       },
+
+    {
+      "type": "separator",
+      "label": "😴 Pending Tabs",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "string",
+        "property": "zen.tabs.pending-emoji",
+        "label": "Emoji indicator",
+        "defaultValue": "🌙",
+        "placeholder": "e.g. 🌙 💤 ⏳"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.pending-emoji-scale",
+        "label": "Emoji scale",
+        "defaultValue": "0.8",
+        "placeholder": "e.g. 0.8"
+      },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.pending-emoji-grayscale",
+        "label": "Grayscale emoji"
+      },
       {
         "type": "checkbox",
         "property": "zen.tabs.essentials-grid",

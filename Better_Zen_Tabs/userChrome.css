@@ -67,9 +67,13 @@
 /* --- Dim unloaded (pending) tabs --- */
 @media (-moz-bool-pref: "zen.tabs.pending-dim") {
   .tabbrowser-tab[pending] .tab-label::before {
-    content: "🌙 ";
-    filter: grayscale(1);
-    scale: 0.8;
+    content: var(--zen-tabs-pending-emoji, "🌙") " ";
+    scale: var(--zen-tabs-pending-emoji-scale, 0.8);
+  }
+  @media (-moz-bool-pref: "zen.tabs.pending-emoji-grayscale") {
+    .tabbrowser-tab[pending] .tab-label::before {
+      filter: grayscale(1);
+    }
   }
   .tabbrowser-tab[pending] {
     filter: brightness(0.6);
