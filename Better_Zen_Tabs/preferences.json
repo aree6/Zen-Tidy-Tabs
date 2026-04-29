@@ -224,6 +224,6 @@
         "label": "Height of tabs inside split group",
         "defaultValue": "40px",
         "placeholder": "e.g. 40px"
-      },
+      }
 
 ]
