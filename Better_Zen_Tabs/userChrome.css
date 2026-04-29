@@ -5,53 +5,47 @@
  * Architecture: two layers.
  *
  * LAYER 1 — CONFIG (:root)
- *   String prefs (light + dark pairs) are auto-injected by Zen as CSS vars.
- *   Dots → hyphens: zen.tabs.normal-bg-light → var(--zen-tabs-normal-bg-light)
- *   The config block below merges each pair into a single light-dark() var.
- *   These merged vars are what the cascade uses. Values update live.
+ *   String prefs are auto-injected by Zen as CSS vars (dots → hyphens).
+ *   This block merges light/dark string pairs into single light-dark() vars.
  *
  * LAYER 2 — CASCADE (@media blocks)
- *   Each tab type is self-contained behind its own checkbox pref.
- *   Cascade order: normal → pinned → essential → split → active.
- *   Later types win because their selectors are more specific.
- *   Active tab is always last and always wins.
+ *   Global rules target every tab. Per-type overrides use more specific
+ *   selectors and come later in the file, so they always win over global.
+ *   Cascade order: global → normal/pinned/essential → active (top).
+ *   Split tabs use a completely different target: the tab-group container.
  * ============================================================================
  */
 
 /* ============================================================================
-   LAYER 1 — CONFIG: merge light/dark pairs into single working vars
+   LAYER 1 — CONFIG
    ============================================================================ */
 :root {
-  /* Shared */
+  /* Shared radius */
   --bzt-radius: var(--zen-tabs-radius, 8px);
 
-  /* Normal tabs */
-  --bzt-normal-bg:              light-dark(var(--zen-tabs-normal-bg-light),              var(--zen-tabs-normal-bg-dark));
-  --bzt-normal-hover-bg:        light-dark(var(--zen-tabs-normal-hover-bg-light),        var(--zen-tabs-normal-hover-bg-dark));
-  --bzt-normal-border:          light-dark(var(--zen-tabs-normal-border-color-light),     var(--zen-tabs-normal-border-color-dark));
-  --bzt-normal-hover-border:    light-dark(var(--zen-tabs-normal-hover-border-color-light), var(--zen-tabs-normal-hover-border-color-dark));
+  /* Global */
+  --bzt-global-bg:                    light-dark(var(--zen-tabs-global-bg-light),                    var(--zen-tabs-global-bg-dark));
+  --bzt-global-hover-bg:              light-dark(var(--zen-tabs-global-hover-bg-light),              var(--zen-tabs-global-hover-bg-dark));
+  --bzt-global-border:                light-dark(var(--zen-tabs-global-border-color-light),          var(--zen-tabs-global-border-color-dark));
+  --bzt-global-hover-border:          light-dark(var(--zen-tabs-global-hover-border-color-light),    var(--zen-tabs-global-hover-border-color-dark));
 
-  /* Pinned tabs */
-  --bzt-pinned-bg:              light-dark(var(--zen-tabs-pinned-bg-light),              var(--zen-tabs-pinned-bg-dark));
-  --bzt-pinned-hover-bg:        light-dark(var(--zen-tabs-pinned-hover-bg-light),        var(--zen-tabs-pinned-hover-bg-dark));
-  --bzt-pinned-border:          light-dark(var(--zen-tabs-pinned-border-color-light),     var(--zen-tabs-pinned-border-color-dark));
-  --bzt-pinned-hover-border:    light-dark(var(--zen-tabs-pinned-hover-border-color-light), var(--zen-tabs-pinned-hover-border-color-dark));
+  /* Per-type overrides */
+  --bzt-normal-bg:                    light-dark(var(--zen-tabs-normal-bg-light),                    var(--zen-tabs-normal-bg-dark));
+  --bzt-normal-border:                light-dark(var(--zen-tabs-normal-border-color-light),          var(--zen-tabs-normal-border-color-dark));
 
-  /* Essential tabs */
-  --bzt-essential-bg:           light-dark(var(--zen-tabs-essential-bg-light),           var(--zen-tabs-essential-bg-dark));
-  --bzt-essential-hover-bg:     light-dark(var(--zen-tabs-essential-hover-bg-light),     var(--zen-tabs-essential-hover-bg-dark));
-  --bzt-essential-border:       light-dark(var(--zen-tabs-essential-border-color-light),  var(--zen-tabs-essential-border-color-dark));
-  --bzt-essential-hover-border: light-dark(var(--zen-tabs-essential-hover-border-color-light), var(--zen-tabs-essential-hover-border-color-dark));
+  --bzt-pinned-bg:                    light-dark(var(--zen-tabs-pinned-bg-light),                    var(--zen-tabs-pinned-bg-dark));
+  --bzt-pinned-border:                light-dark(var(--zen-tabs-pinned-border-color-light),          var(--zen-tabs-pinned-border-color-dark));
 
-  /* Split tabs */
-  --bzt-split-bg:               light-dark(var(--zen-tabs-split-bg-light),               var(--zen-tabs-split-bg-dark));
-  --bzt-split-hover-bg:         light-dark(var(--zen-tabs-split-hover-bg-light),         var(--zen-tabs-split-hover-bg-dark));
-  --bzt-split-border:           light-dark(var(--zen-tabs-split-border-color-light),      var(--zen-tabs-split-border-color-dark));
-  --bzt-split-hover-border:     light-dark(var(--zen-tabs-split-hover-border-color-light), var(--zen-tabs-split-hover-border-color-dark));
+  --bzt-essential-bg:                 light-dark(var(--zen-tabs-essential-bg-light),                 var(--zen-tabs-essential-bg-dark));
+  --bzt-essential-border:             light-dark(var(--zen-tabs-essential-border-color-light),       var(--zen-tabs-essential-border-color-dark));
 
-  /* Active (selected) tab */
-  --bzt-active-bg:              light-dark(var(--zen-tabs-active-bg-light),              var(--zen-tabs-active-bg-dark));
-  --bzt-active-border:          light-dark(var(--zen-tabs-active-border-color-light),     var(--zen-tabs-active-border-color-dark));
+  /* Active (selected) */
+  --bzt-active-bg:                    light-dark(var(--zen-tabs-active-bg-light),                    var(--zen-tabs-active-bg-dark));
+  --bzt-active-border:                light-dark(var(--zen-tabs-active-border-color-light),          var(--zen-tabs-active-border-color-dark));
+
+  /* Split tab group */
+  --bzt-split-group-border:           light-dark(var(--zen-tabs-split-group-border-color-light),     var(--zen-tabs-split-group-border-color-dark));
+  --bzt-split-group-bg:               light-dark(var(--zen-tabs-split-group-bg-light),               var(--zen-tabs-split-group-bg-dark));
 }
 
 /* ============================================================================
@@ -60,10 +54,10 @@
 
 /* --- Dot indicator beneath essential tabs --- */
 @media (-moz-bool-pref: "zen.tabs.dot-indicator") {
-  tab[zen-essential="true"] {
+  .tabbrowser-tab[zen-essential] {
     position: relative;
   }
-  tab[zen-essential="true"]:not([selected])::after {
+  .tabbrowser-tab[zen-essential]:not([selected])::after {
     content: "";
     position: absolute;
     bottom: 0.25em;
@@ -78,7 +72,7 @@
     transition: transform 0.3s ease, opacity 0.3s ease;
     opacity: 0;
   }
-  tab[zen-essential="true"]:not([pending])::after {
+  .tabbrowser-tab[zen-essential]:not([pending])::after {
     transform: translateX(-50%) scale(1);
     opacity: 1;
     z-index: 9999999999 !important;
@@ -109,158 +103,100 @@
 
 /* ============================================================================
    LAYER 2 — TAB STYLING
-   Every property group has its own independent checkbox.
-   Enable only what you want — everything else is untouched.
-   Cascade order within each type: idle → hover.
-   Active tab blocks come last and always win over type-specific rules.
    ============================================================================ */
 
 /* ------------------------------------------------------------------
-   NORMAL TABS  (excludes pinned, essential, split)
+   GLOBAL — all tabs
    ------------------------------------------------------------------ */
 
-@media (-moz-bool-pref: "zen.tabs.normal-bg-enabled") {
-  .tabbrowser-tab:not([pinned]):not([zen-essential="true"]):not([zen-split="true"]) .tab-stack .tab-background {
-    background-color: var(--bzt-normal-bg) !important;
+@media (-moz-bool-pref: "zen.tabs.global-bg-enabled") {
+  .tabbrowser-tab .tab-stack .tab-background {
+    background-color: var(--bzt-global-bg) !important;
     border-radius: var(--bzt-radius) !important;
     transition: background-color 0.2s ease !important;
   }
 }
 
-@media (-moz-bool-pref: "zen.tabs.normal-hover-bg-enabled") {
-  .tabbrowser-tab:not([pinned]):not([zen-essential="true"]):not([zen-split="true"]):hover .tab-stack .tab-background {
-    background-color: var(--bzt-normal-hover-bg) !important;
+@media (-moz-bool-pref: "zen.tabs.global-hover-bg-enabled") {
+  .tabbrowser-tab:hover .tab-stack .tab-background {
+    background-color: var(--bzt-global-hover-bg) !important;
     border-radius: var(--bzt-radius) !important;
     transition: background-color 0.2s ease !important;
+  }
+}
+
+@media (-moz-bool-pref: "zen.tabs.global-border-enabled") {
+  .tabbrowser-tab .tab-stack .tab-background {
+    border: var(--zen-tabs-global-border-width, 1px) solid var(--bzt-global-border) !important;
+    border-radius: var(--bzt-radius) !important;
+    transition: border-color 0.2s ease !important;
+  }
+}
+
+@media (-moz-bool-pref: "zen.tabs.global-hover-border-enabled") {
+  .tabbrowser-tab:hover .tab-stack .tab-background {
+    border: var(--zen-tabs-global-hover-border-width, 1px) solid var(--bzt-global-hover-border) !important;
+    border-radius: var(--bzt-radius) !important;
+    transition: border-color 0.2s ease !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   NORMAL TABS — overrides global (excludes pinned + essential)
+   ------------------------------------------------------------------ */
+
+@media (-moz-bool-pref: "zen.tabs.normal-bg-enabled") {
+  .tabbrowser-tab:not([pinned]):not([zen-essential]) .tab-stack .tab-background {
+    background-color: var(--bzt-normal-bg) !important;
+    border-radius: var(--bzt-radius) !important;
   }
 }
 
 @media (-moz-bool-pref: "zen.tabs.normal-border-enabled") {
-  .tabbrowser-tab:not([pinned]):not([zen-essential="true"]):not([zen-split="true"]) .tab-stack .tab-background {
+  .tabbrowser-tab:not([pinned]):not([zen-essential]) .tab-stack .tab-background {
     border: var(--zen-tabs-normal-border-width, 1px) solid var(--bzt-normal-border) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
-  }
-}
-
-@media (-moz-bool-pref: "zen.tabs.normal-hover-border-enabled") {
-  .tabbrowser-tab:not([pinned]):not([zen-essential="true"]):not([zen-split="true"]):hover .tab-stack .tab-background {
-    border: var(--zen-tabs-normal-hover-border-width, 1px) solid var(--bzt-normal-hover-border) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
   }
 }
 
 /* ------------------------------------------------------------------
-   PINNED TABS  (excludes essential)
+   PINNED TABS — overrides global (excludes essential)
    ------------------------------------------------------------------ */
 
 @media (-moz-bool-pref: "zen.tabs.pinned-bg-enabled") {
-  .tabbrowser-tab[pinned]:not([zen-essential="true"]) .tab-stack .tab-background {
+  .tabbrowser-tab[pinned]:not([zen-essential]) .tab-stack .tab-background {
     background-color: var(--bzt-pinned-bg) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: background-color 0.2s ease !important;
-  }
-}
-
-@media (-moz-bool-pref: "zen.tabs.pinned-hover-bg-enabled") {
-  .tabbrowser-tab[pinned]:not([zen-essential="true"]):hover .tab-stack .tab-background {
-    background-color: var(--bzt-pinned-hover-bg) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: background-color 0.2s ease !important;
   }
 }
 
 @media (-moz-bool-pref: "zen.tabs.pinned-border-enabled") {
-  .tabbrowser-tab[pinned]:not([zen-essential="true"]) .tab-stack .tab-background {
+  .tabbrowser-tab[pinned]:not([zen-essential]) .tab-stack .tab-background {
     border: var(--zen-tabs-pinned-border-width, 1px) solid var(--bzt-pinned-border) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
-  }
-}
-
-@media (-moz-bool-pref: "zen.tabs.pinned-hover-border-enabled") {
-  .tabbrowser-tab[pinned]:not([zen-essential="true"]):hover .tab-stack .tab-background {
-    border: var(--zen-tabs-pinned-hover-border-width, 1px) solid var(--bzt-pinned-hover-border) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
   }
 }
 
 /* ------------------------------------------------------------------
-   ESSENTIAL TABS
+   ESSENTIAL TABS — overrides global
    ------------------------------------------------------------------ */
 
 @media (-moz-bool-pref: "zen.tabs.essential-bg-enabled") {
-  .tabbrowser-tab[zen-essential="true"] .tab-stack .tab-background {
+  .tabbrowser-tab[zen-essential] .tab-stack .tab-background {
     background-color: var(--bzt-essential-bg) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: background-color 0.2s ease !important;
-  }
-}
-
-@media (-moz-bool-pref: "zen.tabs.essential-hover-bg-enabled") {
-  .tabbrowser-tab[zen-essential="true"]:hover .tab-stack .tab-background {
-    background-color: var(--bzt-essential-hover-bg) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: background-color 0.2s ease !important;
   }
 }
 
 @media (-moz-bool-pref: "zen.tabs.essential-border-enabled") {
-  .tabbrowser-tab[zen-essential="true"] .tab-stack .tab-background {
+  .tabbrowser-tab[zen-essential] .tab-stack .tab-background {
     border: var(--zen-tabs-essential-border-width, 1px) solid var(--bzt-essential-border) !important;
     border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
-  }
-}
-
-@media (-moz-bool-pref: "zen.tabs.essential-hover-border-enabled") {
-  .tabbrowser-tab[zen-essential="true"]:hover .tab-stack .tab-background {
-    border: var(--zen-tabs-essential-hover-border-width, 1px) solid var(--bzt-essential-hover-border) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
   }
 }
 
 /* ------------------------------------------------------------------
-   SPLIT TABS
-   ------------------------------------------------------------------ */
-
-@media (-moz-bool-pref: "zen.tabs.split-bg-enabled") {
-  .tabbrowser-tab[zen-split="true"] .tab-stack .tab-background {
-    background-color: var(--bzt-split-bg) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: background-color 0.2s ease !important;
-  }
-}
-
-@media (-moz-bool-pref: "zen.tabs.split-hover-bg-enabled") {
-  .tabbrowser-tab[zen-split="true"]:hover .tab-stack .tab-background {
-    background-color: var(--bzt-split-hover-bg) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: background-color 0.2s ease !important;
-  }
-}
-
-@media (-moz-bool-pref: "zen.tabs.split-border-enabled") {
-  .tabbrowser-tab[zen-split="true"] .tab-stack .tab-background {
-    border: var(--zen-tabs-split-border-width, 1px) solid var(--bzt-split-border) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
-  }
-}
-
-@media (-moz-bool-pref: "zen.tabs.split-hover-border-enabled") {
-  .tabbrowser-tab[zen-split="true"]:hover .tab-stack .tab-background {
-    border: var(--zen-tabs-split-hover-border-width, 1px) solid var(--bzt-split-hover-border) !important;
-    border-radius: var(--bzt-radius) !important;
-    transition: border-color 0.2s ease !important;
-  }
-}
-
-/* ------------------------------------------------------------------
-   ACTIVE (SELECTED) TAB  — always wins, applied last
+   ACTIVE (SELECTED) TAB — always wins, applied last
    ------------------------------------------------------------------ */
 
 @media (-moz-bool-pref: "zen.tabs.active-bg-enabled") {
@@ -279,4 +215,31 @@
     border-radius: var(--bzt-radius) !important;
     transition: border-color 0.2s ease !important;
   }
+}
+
+/* ------------------------------------------------------------------
+   SPLIT TAB GROUP
+   Targets the group container, not individual tab backgrounds.
+   tab-group[split-view-group] wraps all tabs in a split group.
+   ------------------------------------------------------------------ */
+
+@media (-moz-bool-pref: "zen.tabs.split-group-border-enabled") {
+  tab-group[split-view-group] .tab-group-container {
+    outline: var(--zen-tabs-split-group-border-width, 1px) solid var(--bzt-split-group-border) !important;
+    border-radius: var(--zen-tabs-split-group-border-radius, 10px) !important;
+    transition: outline-color 0.2s ease !important;
+  }
+}
+
+@media (-moz-bool-pref: "zen.tabs.split-group-bg-enabled") {
+  tab-group[split-view-group] .tab-group-container {
+    background-color: var(--bzt-split-group-bg) !important;
+    border-radius: var(--zen-tabs-split-group-border-radius, 10px) !important;
+    transition: background-color 0.2s ease !important;
+  }
+}
+
+/* Split tab height — controls min-height of each tab row inside the group */
+tab-group[split-view-group] .tabbrowser-tab {
+  min-height: var(--zen-tabs-split-tab-height, 28px) !important;
 }

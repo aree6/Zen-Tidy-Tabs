@@ -48,108 +48,102 @@
 
     {
       "type": "separator",
-      "label": "⚙️ Global",
+      "label": "🌐 Global — applies to all tabs",
       "margin": "15px 0 15px 0"
     },
       {
         "type": "string",
         "property": "zen.tabs.radius",
-        "label": "Border radius — all tabs",
+        "label": "Border radius",
         "defaultValue": "8px",
         "placeholder": "e.g. 8px"
       },
-
-    {
-      "type": "separator",
-      "label": "🗒️ Normal Tabs",
-      "margin": "15px 0 15px 0"
-    },
       {
         "type": "checkbox",
-        "property": "zen.tabs.normal-bg-enabled",
-        "label": "Custom idle background"
+        "property": "zen.tabs.global-bg-enabled",
+        "label": "Background"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-bg-light",
-        "label": "Idle background (light mode)",
+        "property": "zen.tabs.global-bg-light",
+        "label": "Background (light mode)",
         "defaultValue": "rgba(0,0,0,0.06)",
         "placeholder": "e.g. rgba(0,0,0,0.06)"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-bg-dark",
-        "label": "Idle background (dark mode)",
+        "property": "zen.tabs.global-bg-dark",
+        "label": "Background (dark mode)",
         "defaultValue": "rgba(255,255,255,0.07)",
         "placeholder": "e.g. rgba(255,255,255,0.07)"
       },
       {
         "type": "checkbox",
-        "property": "zen.tabs.normal-hover-bg-enabled",
-        "label": "Custom hover background"
+        "property": "zen.tabs.global-hover-bg-enabled",
+        "label": "Hover background"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-hover-bg-light",
+        "property": "zen.tabs.global-hover-bg-light",
         "label": "Hover background (light mode)",
         "defaultValue": "rgba(0,0,0,0.1)",
         "placeholder": "e.g. rgba(0,0,0,0.1)"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-hover-bg-dark",
+        "property": "zen.tabs.global-hover-bg-dark",
         "label": "Hover background (dark mode)",
         "defaultValue": "rgba(255,255,255,0.12)",
         "placeholder": "e.g. rgba(255,255,255,0.12)"
       },
       {
         "type": "checkbox",
-        "property": "zen.tabs.normal-border-enabled",
-        "label": "Custom idle border"
+        "property": "zen.tabs.global-border-enabled",
+        "label": "Border"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-border-color-light",
-        "label": "Idle border color (light mode)",
+        "property": "zen.tabs.global-border-color-light",
+        "label": "Border color (light mode)",
         "defaultValue": "rgba(0,0,0,0.1)",
         "placeholder": "e.g. rgba(0,0,0,0.1)"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-border-color-dark",
-        "label": "Idle border color (dark mode)",
+        "property": "zen.tabs.global-border-color-dark",
+        "label": "Border color (dark mode)",
         "defaultValue": "rgba(255,255,255,0.1)",
         "placeholder": "e.g. rgba(255,255,255,0.1)"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-border-width",
-        "label": "Idle border thickness",
+        "property": "zen.tabs.global-border-width",
+        "label": "Border thickness",
         "defaultValue": "1px",
         "placeholder": "e.g. 1px"
       },
       {
         "type": "checkbox",
-        "property": "zen.tabs.normal-hover-border-enabled",
-        "label": "Custom hover border"
+        "property": "zen.tabs.global-hover-border-enabled",
+        "label": "Hover border"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-hover-border-color-light",
+        "property": "zen.tabs.global-hover-border-color-light",
         "label": "Hover border color (light mode)",
         "defaultValue": "rgba(0,0,0,0.2)",
         "placeholder": "e.g. rgba(0,0,0,0.2)"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-hover-border-color-dark",
+        "property": "zen.tabs.global-hover-border-color-dark",
         "label": "Hover border color (dark mode)",
         "defaultValue": "rgba(255,255,255,0.2)",
         "placeholder": "e.g. rgba(255,255,255,0.2)"
       },
       {
         "type": "string",
-        "property": "zen.tabs.normal-hover-border-width",
+        "property": "zen.tabs.global-hover-border-width",
         "label": "Hover border thickness",
         "defaultValue": "1px",
         "placeholder": "e.g. 1px"
@@ -157,301 +151,13 @@
 
     {
       "type": "separator",
-      "label": "📌 Pinned Tabs",
-      "margin": "15px 0 15px 0"
-    },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.pinned-bg-enabled",
-        "label": "Custom idle background"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-bg-light",
-        "label": "Idle background (light mode)",
-        "defaultValue": "rgba(0,0,0,0.05)",
-        "placeholder": "e.g. rgba(0,0,0,0.05)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-bg-dark",
-        "label": "Idle background (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.05)",
-        "placeholder": "e.g. rgba(255,255,255,0.05)"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.pinned-hover-bg-enabled",
-        "label": "Custom hover background"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-hover-bg-light",
-        "label": "Hover background (light mode)",
-        "defaultValue": "rgba(0,0,0,0.1)",
-        "placeholder": "e.g. rgba(0,0,0,0.1)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-hover-bg-dark",
-        "label": "Hover background (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.12)",
-        "placeholder": "e.g. rgba(255,255,255,0.12)"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.pinned-border-enabled",
-        "label": "Custom idle border"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-border-color-light",
-        "label": "Idle border color (light mode)",
-        "defaultValue": "rgba(0,0,0,0.08)",
-        "placeholder": "e.g. rgba(0,0,0,0.08)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-border-color-dark",
-        "label": "Idle border color (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.08)",
-        "placeholder": "e.g. rgba(255,255,255,0.08)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-border-width",
-        "label": "Idle border thickness",
-        "defaultValue": "1px",
-        "placeholder": "e.g. 1px"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.pinned-hover-border-enabled",
-        "label": "Custom hover border"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-hover-border-color-light",
-        "label": "Hover border color (light mode)",
-        "defaultValue": "rgba(0,0,0,0.18)",
-        "placeholder": "e.g. rgba(0,0,0,0.18)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-hover-border-color-dark",
-        "label": "Hover border color (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.18)",
-        "placeholder": "e.g. rgba(255,255,255,0.18)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.pinned-hover-border-width",
-        "label": "Hover border thickness",
-        "defaultValue": "1px",
-        "placeholder": "e.g. 1px"
-      },
-
-    {
-      "type": "separator",
-      "label": "⭐ Essential Tabs",
-      "margin": "15px 0 15px 0"
-    },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.essential-bg-enabled",
-        "label": "Custom idle background"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-bg-light",
-        "label": "Idle background (light mode)",
-        "defaultValue": "rgba(0,0,0,0.05)",
-        "placeholder": "e.g. rgba(0,0,0,0.05)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-bg-dark",
-        "label": "Idle background (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.05)",
-        "placeholder": "e.g. rgba(255,255,255,0.05)"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.essential-hover-bg-enabled",
-        "label": "Custom hover background"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-hover-bg-light",
-        "label": "Hover background (light mode)",
-        "defaultValue": "rgba(0,0,0,0.1)",
-        "placeholder": "e.g. rgba(0,0,0,0.1)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-hover-bg-dark",
-        "label": "Hover background (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.12)",
-        "placeholder": "e.g. rgba(255,255,255,0.12)"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.essential-border-enabled",
-        "label": "Custom idle border"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-border-color-light",
-        "label": "Idle border color (light mode)",
-        "defaultValue": "rgba(0,0,0,0.08)",
-        "placeholder": "e.g. rgba(0,0,0,0.08)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-border-color-dark",
-        "label": "Idle border color (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.08)",
-        "placeholder": "e.g. rgba(255,255,255,0.08)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-border-width",
-        "label": "Idle border thickness",
-        "defaultValue": "1px",
-        "placeholder": "e.g. 1px"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.essential-hover-border-enabled",
-        "label": "Custom hover border"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-hover-border-color-light",
-        "label": "Hover border color (light mode)",
-        "defaultValue": "rgba(0,0,0,0.18)",
-        "placeholder": "e.g. rgba(0,0,0,0.18)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-hover-border-color-dark",
-        "label": "Hover border color (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.18)",
-        "placeholder": "e.g. rgba(255,255,255,0.18)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.essential-hover-border-width",
-        "label": "Hover border thickness",
-        "defaultValue": "1px",
-        "placeholder": "e.g. 1px"
-      },
-
-    {
-      "type": "separator",
-      "label": "🔀 Split Tabs",
-      "margin": "15px 0 15px 0"
-    },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.split-bg-enabled",
-        "label": "Custom idle background"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-bg-light",
-        "label": "Idle background (light mode)",
-        "defaultValue": "rgba(0,0,0,0.06)",
-        "placeholder": "e.g. rgba(0,0,0,0.06)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-bg-dark",
-        "label": "Idle background (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.07)",
-        "placeholder": "e.g. rgba(255,255,255,0.07)"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.split-hover-bg-enabled",
-        "label": "Custom hover background"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-hover-bg-light",
-        "label": "Hover background (light mode)",
-        "defaultValue": "rgba(0,0,0,0.1)",
-        "placeholder": "e.g. rgba(0,0,0,0.1)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-hover-bg-dark",
-        "label": "Hover background (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.12)",
-        "placeholder": "e.g. rgba(255,255,255,0.12)"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.split-border-enabled",
-        "label": "Custom idle border"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-border-color-light",
-        "label": "Idle border color (light mode)",
-        "defaultValue": "rgba(0,0,0,0.1)",
-        "placeholder": "e.g. rgba(0,0,0,0.1)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-border-color-dark",
-        "label": "Idle border color (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.1)",
-        "placeholder": "e.g. rgba(255,255,255,0.1)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-border-width",
-        "label": "Idle border thickness",
-        "defaultValue": "1px",
-        "placeholder": "e.g. 1px"
-      },
-      {
-        "type": "checkbox",
-        "property": "zen.tabs.split-hover-border-enabled",
-        "label": "Custom hover border"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-hover-border-color-light",
-        "label": "Hover border color (light mode)",
-        "defaultValue": "rgba(0,0,0,0.2)",
-        "placeholder": "e.g. rgba(0,0,0,0.2)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-hover-border-color-dark",
-        "label": "Hover border color (dark mode)",
-        "defaultValue": "rgba(255,255,255,0.2)",
-        "placeholder": "e.g. rgba(255,255,255,0.2)"
-      },
-      {
-        "type": "string",
-        "property": "zen.tabs.split-hover-border-width",
-        "label": "Hover border thickness",
-        "defaultValue": "1px",
-        "placeholder": "e.g. 1px"
-      },
-
-    {
-      "type": "separator",
-      "label": "✅ Active (Selected) Tab",
+      "label": "✅ Active (Selected) Tab — overrides global",
       "margin": "15px 0 15px 0"
     },
       {
         "type": "checkbox",
         "property": "zen.tabs.active-bg-enabled",
-        "label": "Custom background (overrides type-specific bg above)"
+        "label": "Background"
       },
       {
         "type": "string",
@@ -470,7 +176,7 @@
       {
         "type": "checkbox",
         "property": "zen.tabs.active-border-enabled",
-        "label": "Custom border (overrides type-specific border above)"
+        "label": "Border"
       },
       {
         "type": "string",
@@ -492,5 +198,223 @@
         "label": "Border thickness",
         "defaultValue": "1px",
         "placeholder": "e.g. 1px"
+      },
+
+    {
+      "type": "separator",
+      "label": "🗒️ Normal Tabs — overrides global",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.normal-bg-enabled",
+        "label": "Background"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.normal-bg-light",
+        "label": "Background (light mode)",
+        "defaultValue": "rgba(0,0,0,0.06)",
+        "placeholder": "e.g. rgba(0,0,0,0.06)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.normal-bg-dark",
+        "label": "Background (dark mode)",
+        "defaultValue": "rgba(255,255,255,0.07)",
+        "placeholder": "e.g. rgba(255,255,255,0.07)"
+      },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.normal-border-enabled",
+        "label": "Border"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.normal-border-color-light",
+        "label": "Border color (light mode)",
+        "defaultValue": "rgba(0,0,0,0.1)",
+        "placeholder": "e.g. rgba(0,0,0,0.1)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.normal-border-color-dark",
+        "label": "Border color (dark mode)",
+        "defaultValue": "rgba(255,255,255,0.1)",
+        "placeholder": "e.g. rgba(255,255,255,0.1)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.normal-border-width",
+        "label": "Border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+
+    {
+      "type": "separator",
+      "label": "📌 Pinned Tabs — overrides global",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.pinned-bg-enabled",
+        "label": "Background"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.pinned-bg-light",
+        "label": "Background (light mode)",
+        "defaultValue": "rgba(0,0,0,0.05)",
+        "placeholder": "e.g. rgba(0,0,0,0.05)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.pinned-bg-dark",
+        "label": "Background (dark mode)",
+        "defaultValue": "rgba(255,255,255,0.05)",
+        "placeholder": "e.g. rgba(255,255,255,0.05)"
+      },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.pinned-border-enabled",
+        "label": "Border"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.pinned-border-color-light",
+        "label": "Border color (light mode)",
+        "defaultValue": "rgba(0,0,0,0.08)",
+        "placeholder": "e.g. rgba(0,0,0,0.08)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.pinned-border-color-dark",
+        "label": "Border color (dark mode)",
+        "defaultValue": "rgba(255,255,255,0.08)",
+        "placeholder": "e.g. rgba(255,255,255,0.08)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.pinned-border-width",
+        "label": "Border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+
+    {
+      "type": "separator",
+      "label": "⭐ Essential Tabs — overrides global",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.essential-bg-enabled",
+        "label": "Background"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.essential-bg-light",
+        "label": "Background (light mode)",
+        "defaultValue": "rgba(0,0,0,0.05)",
+        "placeholder": "e.g. rgba(0,0,0,0.05)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.essential-bg-dark",
+        "label": "Background (dark mode)",
+        "defaultValue": "rgba(255,255,255,0.05)",
+        "placeholder": "e.g. rgba(255,255,255,0.05)"
+      },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.essential-border-enabled",
+        "label": "Border"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.essential-border-color-light",
+        "label": "Border color (light mode)",
+        "defaultValue": "rgba(0,0,0,0.08)",
+        "placeholder": "e.g. rgba(0,0,0,0.08)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.essential-border-color-dark",
+        "label": "Border color (dark mode)",
+        "defaultValue": "rgba(255,255,255,0.08)",
+        "placeholder": "e.g. rgba(255,255,255,0.08)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.essential-border-width",
+        "label": "Border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+
+    {
+      "type": "separator",
+      "label": "🔀 Split Tab Group",
+      "margin": "15px 0 15px 0"
+    },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.split-group-border-enabled",
+        "label": "Border around the whole split group"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.split-group-border-color-light",
+        "label": "Group border color (light mode)",
+        "defaultValue": "rgba(0,0,0,0.15)",
+        "placeholder": "e.g. rgba(0,0,0,0.15)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.split-group-border-color-dark",
+        "label": "Group border color (dark mode)",
+        "defaultValue": "rgba(255,255,255,0.15)",
+        "placeholder": "e.g. rgba(255,255,255,0.15)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.split-group-border-width",
+        "label": "Group border thickness",
+        "defaultValue": "1px",
+        "placeholder": "e.g. 1px"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.split-group-border-radius",
+        "label": "Group border radius",
+        "defaultValue": "10px",
+        "placeholder": "e.g. 10px"
+      },
+      {
+        "type": "checkbox",
+        "property": "zen.tabs.split-group-bg-enabled",
+        "label": "Background behind the split group"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.split-group-bg-light",
+        "label": "Group background (light mode)",
+        "defaultValue": "rgba(0,0,0,0.04)",
+        "placeholder": "e.g. rgba(0,0,0,0.04)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.split-group-bg-dark",
+        "label": "Group background (dark mode)",
+        "defaultValue": "rgba(255,255,255,0.04)",
+        "placeholder": "e.g. rgba(255,255,255,0.04)"
+      },
+      {
+        "type": "string",
+        "property": "zen.tabs.split-tab-height",
+        "label": "Height of individual tabs inside split group",
+        "defaultValue": "28px",
+        "placeholder": "e.g. 28px"
       }
 ]
