@@ -47,6 +47,13 @@
         "label": "Grayscale emoji"
       },
       {
+        "type": "string",
+        "property": "zen.tabs.pending-emoji-grayscale-amount",
+        "label": "Grayscale amount",
+        "defaultValue": "100%",
+        "placeholder": "e.g. 100%"
+      },
+      {
         "type": "checkbox",
         "property": "zen.tabs.essentials-grid",
         "label": "Grid layout for essential tabs"

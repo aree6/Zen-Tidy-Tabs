@@ -70,11 +70,11 @@
     content: "💤";
     display: inline-block;
     margin-inline-end: 0.3em;
-    transform: scale(var(--zen-tabs-pending-emoji-scale, 0.8));
+    transform: scale(var(--zen-tabs-pending-emoji-scale, 1));
   }
   @media (-moz-bool-pref: "zen.tabs.pending-emoji-grayscale") {
     .tabbrowser-tab[pending] .tab-label::before {
-      filter: grayscale(1);
+      filter: grayscale(var(--zen-tabs-pending-emoji-grayscale-amount, 100%));
     }
   }
   .tabbrowser-tab[pending] {
