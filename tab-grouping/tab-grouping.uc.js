@@ -138,6 +138,17 @@
     OPENROUTER_MODEL: ["string", "openrouter.model"],
     OPENROUTER_API_KEY: ["string", "openrouter.api-key"],
     PROTECTED_HOSTS: ["string", "behavior.protected-hosts"],
+    ENABLE_INLINE_BUTTONS: ["bool", "ui.enable-inline-buttons"],
+    INLINE_BUTTON_STYLE: ["string", "ui.inline-button-style"],
+    INLINE_BUTTON_VISIBILITY: ["string", "ui.inline-button-visibility"],
+    SHOW_SORT_BUTTON: ["bool", "ui.show-sort-button"],
+    SHOW_CLEAR_BUTTON: ["bool", "ui.show-clear-button"],
+    SHOW_GROUP_BUTTON: ["bool", "ui.show-group-button"],
+    SHOW_UNGROUP_BUTTON: ["bool", "ui.show-ungroup-button"],
+    SEPARATOR_LINE_MODE: ["string", "ui.separator-line-mode"],
+    ENABLE_GROUP_BG_TINT: ["bool", "ui.enable-group-bg-tint"],
+    GROUP_BG_OPACITY: ["double", "ui.group-bg-opacity"],
+    ENABLE_CONTEXT_MENU: ["bool", "ui.enable-context-menu"],
   };
 
   const services =
@@ -2489,6 +2500,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         console.error("Error reordering tabs (groups first):", reorderError);
         // Don't fail the whole sort if reordering fails
       }
+
+      // Apply group background tints after sorting creates new groups
+      applyGroupTints();
     } catch (error) {
       console.error("Error during overall sorting process:", error);
     } finally {
@@ -2517,6 +2531,202 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         }, 800);
       }
     }
+  };
+
+  // --- Inline Separator Buttons -------------------------------------------
+  // Injects configurable action buttons (Sort, Clear, Group, Ungroup) onto
+  // the pinned/normal separator. Visibility, style, and which buttons appear
+  // are all controlled via preferences (off by default).
+
+  // Lucide-style SVG icons for inline buttons (14×14, stroke-based)
+  const INLINE_BTN_ICONS = {
+    sort: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M3 12h12"/><path d="M3 18h6"/></svg>`,
+    clear: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
+    group: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="2" y="2" rx="1"/><rect width="8" height="8" x="14" y="2" rx="1"/><rect width="8" height="8" x="2" y="14" rx="1"/><rect width="8" height="8" x="14" y="14" rx="1"/></svg>`,
+    ungroup: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="2" y="2" rx="1"/><rect width="8" height="8" x="14" y="14" rx="1"/><path d="M14 2h8v8"/><path d="M2 14l12 12"/></svg>`,
+  };
+
+  const svgInlineToDataURI = (svg) => {
+    try { return "data:image/svg+xml;base64," + btoa(svg); } catch { return ""; }
+  };
+
+  // Ungroup all tabs in the current workspace: removes each tab from its
+  // group/folder so they become loose again.
+  const ungroupAllTabs = () => {
+    const workspaceId = window.gZenWorkspaces?.activeWorkspace;
+    if (!workspaceId) return;
+
+    const groups = getWorkspaceGroupElements(workspaceId);
+    for (const groupEl of groups) {
+      if (groupEl.hasAttribute("split-view-group")) continue;
+      try {
+        const tabs = Array.from(groupEl.querySelectorAll("tab"))
+          .filter(t => t?.isConnected);
+        if (isFolderGroupElement(groupEl)) {
+          // Zen folders: remove tabs from folder, then unpin
+          for (const tab of tabs) {
+            try {
+              if (tab.pinned) gBrowser.unpinTab(tab);
+            } catch {}
+          }
+          groupEl.remove();
+        } else {
+          // Regular tab-group: use native ungroup
+          if (typeof gBrowser.removeTabGroup === "function") {
+            gBrowser.removeTabGroup(groupEl, { animate: false });
+          } else {
+            for (const tab of tabs) {
+              try { gBrowser.moveTabTo(tab, gBrowser.tabs.length - 1); } catch {}
+            }
+            groupEl.remove();
+          }
+        }
+      } catch (e) {
+        console.warn(`[TidyTabs] Error ungrouping "${groupEl.getAttribute("label")}":`, e);
+      }
+    }
+  };
+
+  // Close all ungrouped, non-pinned, non-selected, non-empty tabs in the
+  // current workspace — the inline "Clear" action.
+  const clearUngroupedTabs = () => {
+    const workspaceId = window.gZenWorkspaces?.activeWorkspace;
+    if (!workspaceId) return;
+
+    const tabsToClose = getFilteredTabs(workspaceId, {
+      includeGrouped: false,
+      includeSelected: false,
+      includePinned: false,
+      includeEmpty: false,
+      includeGlance: false,
+    });
+
+    if (tabsToClose.length > 0) {
+      gBrowser.removeTabs(tabsToClose);
+      console.log(`[TidyTabs] Cleared ${tabsToClose.length} ungrouped tabs`);
+    }
+  };
+
+  // Build a single inline button element.
+  const createInlineButton = (action, label, iconSvg) => {
+    const btn = document.createXULElement("toolbarbutton");
+    btn.className = "tidy-tabs-inline-btn";
+    btn.setAttribute("tooltiptext", label);
+    btn.dataset.action = action;
+
+    // Build inner content based on style preference
+    const style = CONFIG.INLINE_BUTTON_STYLE || "text";
+    const iconUri = svgInlineToDataURI(iconSvg);
+
+    if (style === "icons") {
+      btn.setAttribute("image", iconUri);
+    } else if (style === "both") {
+      btn.setAttribute("image", iconUri);
+      // We'll add a text label via a child element
+      const labelEl = document.createElement("span");
+      labelEl.className = "btn-label";
+      labelEl.textContent = label;
+      btn.appendChild(labelEl);
+    } else {
+      // text only
+      const labelEl = document.createElement("span");
+      labelEl.className = "btn-label";
+      labelEl.textContent = label;
+      btn.appendChild(labelEl);
+    }
+
+    // Wire up the action
+    switch (action) {
+      case "sort":
+        btn.addEventListener("command", () => sortTabsByTopic(false));
+        break;
+      case "clear":
+        btn.addEventListener("command", () => clearUngroupedTabs());
+        break;
+      case "group":
+        btn.addEventListener("command", () => sortTabsByTopic(false));
+        break;
+      case "ungroup":
+        btn.addEventListener("command", () => ungroupAllTabs());
+        break;
+    }
+
+    return btn;
+  };
+
+  // Determine which buttons to show based on config.
+  const getInlineButtonDefs = () => {
+    const defs = [];
+    if (CONFIG.SHOW_SORT_BUTTON)   defs.push({ action: "sort",    label: "Sort",   icon: INLINE_BTN_ICONS.sort });
+    if (CONFIG.SHOW_CLEAR_BUTTON)  defs.push({ action: "clear",   label: "Clear",  icon: INLINE_BTN_ICONS.clear });
+    if (CONFIG.SHOW_GROUP_BUTTON)  defs.push({ action: "group",   label: "Group",  icon: INLINE_BTN_ICONS.group });
+    if (CONFIG.SHOW_UNGROUP_BUTTON) defs.push({ action: "ungroup", label: "Ungroup", icon: INLINE_BTN_ICONS.ungroup });
+    return defs;
+  };
+
+  // Inject inline buttons into all separators in the active workspace.
+  // Idempotent: removes stale buttons first, then re-injects.
+  const injectInlineButtons = () => {
+    if (!CONFIG.ENABLE_INLINE_BUTTONS) return;
+
+    const separators = domCache.getSeparators();
+    if (!separators || separators.length === 0) return;
+
+    const buttonDefs = getInlineButtonDefs();
+    if (buttonDefs.length === 0) return;
+
+    const visibility = CONFIG.INLINE_BUTTON_VISIBILITY || "hover";
+    const style = CONFIG.INLINE_BUTTON_STYLE || "text";
+    const lineMode = CONFIG.SEPARATOR_LINE_MODE || "hover";
+
+    for (const sep of separators) {
+      if (!sep?.isConnected) continue;
+      if (sep.classList.contains("has-no-sortable-tabs")) continue;
+
+      // Remove any existing button container
+      const existing = sep.querySelector(".tidy-tabs-button-container");
+      if (existing) existing.remove();
+
+      // Apply visibility class
+      sep.classList.remove("tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden");
+      if (visibility === "always") sep.classList.add("tidy-tabs-buttons-always");
+      if (visibility === "hidden") sep.classList.add("tidy-tabs-buttons-hidden");
+
+      // Apply button style class
+      sep.classList.remove("tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both");
+      sep.classList.add(`tidy-tabs-btn-style-${style}`);
+
+      // Apply separator line mode class
+      sep.classList.remove("tidy-tabs-separator-always", "tidy-tabs-separator-hidden");
+      if (lineMode === "always") sep.classList.add("tidy-tabs-separator-always");
+      if (lineMode === "hidden") sep.classList.add("tidy-tabs-separator-hidden");
+
+      // Build button container
+      const container = document.createElement("div");
+      container.className = "tidy-tabs-button-container";
+
+      for (const def of buttonDefs) {
+        const btn = createInlineButton(def.action, def.label, def.icon);
+        container.appendChild(btn);
+      }
+
+      sep.appendChild(container);
+    }
+  };
+
+  // Remove all injected inline buttons from separators.
+  const removeInlineButtons = () => {
+    const containers = document.querySelectorAll(".tidy-tabs-button-container");
+    containers.forEach(c => c.remove());
+    // Clean up classes from separators
+    const seps = document.querySelectorAll(".pinned-tabs-container-separator");
+    seps.forEach(sep => {
+      sep.classList.remove(
+        "tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden",
+        "tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both",
+        "tidy-tabs-separator-always", "tidy-tabs-separator-hidden"
+      );
+    });
   };
 
   // --- Sidebar Context Menu ------------------------------------------------
@@ -2676,6 +2886,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   }
 
   function ensureSidebarContextMenu() {
+    if (!CONFIG.ENABLE_CONTEXT_MENU) return;
     if (sidebarMenuListenersAdded) {
       ensureFallbackPopup();
       return;
@@ -2762,6 +2973,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           );
         }
       }
+      // Re-inject inline buttons and apply tints after tab browser changes
+      domCache.invalidate();
+      injectInlineButtons();
+      applyGroupTints();
     };
 
     window.gZenWorkspaces.updateTabsContainers = function (...args) {
@@ -2775,6 +2990,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           );
         }
       }
+      // Re-inject inline buttons and apply tints after container updates
+      domCache.invalidate();
+      injectInlineButtons();
+      applyGroupTints();
     };
 
     gZenWorkspaceHooksApplied = true;
@@ -2890,6 +3109,142 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     console.log("[TidyTabs] Successfully patched closeAllUnpinnedTabs to preserve tab-groups");
   }
 
+  // --- Favicon Color Extraction & Group Background Tint ---
+  // Extracts the dominant color from a tab's favicon image data,
+  // filtering out near-white/near-black/near-gray pixels that carry
+  // no useful chromatic signal. Returns an {r, g, b} object or null.
+
+  const FAVICON_COLOR_CACHE = new Map();
+  const FAVICON_CACHE_LIMIT = 200;
+
+  const extractDominantColorFromImageData = (imageData) => {
+    if (!imageData?.data?.length) return null;
+    const { data } = imageData;
+    const colorBuckets = new Map();
+    const BUCKET_SIZE = 24;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+      if (a < 128) continue;
+
+      // Skip near-white, near-black, and low-saturation (gray) pixels
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const saturation = max === 0 ? 0 : (max - min) / max;
+      if (saturation < 0.15) continue;
+      if (max > 240 && min > 220) continue;
+      if (max < 30) continue;
+
+      // Bucket to reduce noise
+      const br = Math.round(r / BUCKET_SIZE) * BUCKET_SIZE;
+      const bg = Math.round(g / BUCKET_SIZE) * BUCKET_SIZE;
+      const bb = Math.round(b / BUCKET_SIZE) * BUCKET_SIZE;
+      const key = `${br},${bg},${bb}`;
+      colorBuckets.set(key, (colorBuckets.get(key) || 0) + 1);
+    }
+
+    if (colorBuckets.size === 0) return null;
+
+    let bestKey = "", bestCount = 0;
+    for (const [key, count] of colorBuckets) {
+      if (count > bestCount) { bestCount = count; bestKey = key; }
+    }
+
+    const [r, g, b] = bestKey.split(",").map(Number);
+    return Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)
+      ? { r, g, b }
+      : null;
+  };
+
+  // Extract dominant color from a tab's favicon via canvas sampling.
+  // Caches by the favicon's src URL. Returns {r, g, b} or null.
+  const extractFaviconColor = (tab) => {
+    try {
+      const iconEl = tab?.querySelector(".tab-icon-image");
+      if (!iconEl) return null;
+
+      const src = iconEl.getAttribute("src") || iconEl.style.listStyleImage;
+      if (!src) return null;
+
+      if (FAVICON_COLOR_CACHE.has(src)) return FAVICON_COLOR_CACHE.get(src);
+
+      // Create an off-screen canvas to sample the favicon
+      const canvas = document.createElement("canvas");
+      const size = 32;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+
+      // Synchronous fallback: try drawing from the icon element's current
+      // rendered state. If the image hasn't loaded yet, this returns empty.
+      try {
+        ctx.drawImage(iconEl, 0, 0, size, size);
+        const imageData = ctx.getImageData(0, 0, size, size);
+        const color = extractDominantColorFromImageData(imageData);
+        if (color) {
+          if (FAVICON_COLOR_CACHE.size >= FAVICON_CACHE_LIMIT) {
+            const oldest = FAVICON_COLOR_CACHE.keys().next().value;
+            FAVICON_COLOR_CACHE.delete(oldest);
+          }
+          FAVICON_COLOR_CACHE.set(src, color);
+          return color;
+        }
+      } catch {}
+
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Compute a representative color for a group by averaging the favicon
+  // colors of its tabs. Returns {r, g, b} or null.
+  const computeGroupColor = (groupEl) => {
+    if (!groupEl?.isConnected) return null;
+    const tabs = Array.from(groupEl.querySelectorAll("tab"))
+      .filter(t => t?.isConnected && !t.hasAttribute("zen-empty-tab"));
+    if (!tabs.length) return null;
+
+    let rSum = 0, gSum = 0, bSum = 0, count = 0;
+    for (const tab of tabs) {
+      const c = extractFaviconColor(tab);
+      if (c) { rSum += c.r; gSum += c.g; bSum += c.b; count++; }
+    }
+    if (count === 0) return null;
+    return { r: Math.round(rSum / count), g: Math.round(gSum / count), b: Math.round(bSum / count) };
+  };
+
+  // Apply a subtle RGBA background tint to a group element using the
+  // extracted color and the user-configured opacity.
+  const applyGroupTint = (groupEl, color) => {
+    if (!groupEl?.isConnected || !color) return;
+    const opacity = Math.max(0, Math.min(1, CONFIG.GROUP_BG_OPACITY));
+    groupEl.style.setProperty(
+      "--tab-group-tint-color",
+      `rgba(${color.r}, ${color.g}, ${color.b}, ${opacity})`
+    );
+    groupEl.classList.add("tidy-tabs-tinted");
+  };
+
+  // Scan all groups in the active workspace and apply tinting.
+  const applyGroupTints = () => {
+    if (!CONFIG.ENABLE_GROUP_BG_TINT) return;
+    const workspaceId = window.gZenWorkspaces?.activeWorkspace;
+    if (!workspaceId) return;
+
+    const groups = getWorkspaceGroupElements(workspaceId);
+    for (const groupEl of groups) {
+      // Skip split-view groups and zen-folders (folders have their own styling)
+      if (groupEl.hasAttribute("split-view-group")) continue;
+      if (isFolderGroupElement(groupEl)) continue;
+      // Only tint groups that haven't been tinted yet or whose tabs changed
+      const color = computeGroupColor(groupEl);
+      if (color) applyGroupTint(groupEl, color);
+    }
+  };
+
   const isLooseUngroupedTab = (node) =>
     node?.tagName?.toLowerCase() === "tab" &&
     !node.hasAttribute("zen-empty-tab") &&
@@ -2954,7 +3309,11 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       return;
     }
 
-    tabContainerEventHandler = () => {};
+    tabContainerEventHandler = () => {
+      domCache.invalidate();
+      injectInlineButtons();
+      applyGroupTints();
+    };
 
     TAB_CONTAINER_EVENTS.forEach((eventName) => {
       gBrowser.tabContainer.addEventListener(eventName, tabContainerEventHandler);
@@ -3029,6 +3388,17 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       namingEnginePromise = null;
       EMBEDDING_CACHE.clear();
 
+      // Remove inline buttons and clean up separator classes
+      removeInlineButtons();
+
+      // Remove group tint styling
+      const tintedGroups = document.querySelectorAll("tab-group.tidy-tabs-tinted");
+      tintedGroups.forEach(g => {
+        g.classList.remove("tidy-tabs-tinted");
+        g.style.removeProperty("--tab-group-tint-color");
+      });
+      FAVICON_COLOR_CACHE.clear();
+
       // Clear DOM cache
       domCache.invalidate();
 
@@ -3060,6 +3430,8 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           patchClearButtonToPreserveGroups();
           addTabEventListeners();
           processExistingTabGroups();
+          injectInlineButtons();
+          applyGroupTints();
           return true;
         }
       } catch (e) {
