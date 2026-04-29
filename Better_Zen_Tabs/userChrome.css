@@ -5,7 +5,6 @@
  * Philosophy: minimum chrome, maximum content.
  * Tabs are invisible by default. Only the active tab gets a border.
  * Pinned tabs get a barely-there tint. Split groups get a clean outline.
- * The separator between pinned/essential and normal tabs is configurable.
  *
  * LAYER 1 — CONFIG (:root)
  *   String prefs are auto-injected by Zen as CSS vars (dots → hyphens).
@@ -29,8 +28,6 @@
 
   --bzt-split-group-border: light-dark(var(--zen-tabs-split-group-border-color-light), var(--zen-tabs-split-group-border-color-dark));
   --bzt-split-group-bg:     light-dark(var(--zen-tabs-split-group-bg-light),           var(--zen-tabs-split-group-bg-dark));
-
-  --bzt-separator:          light-dark(var(--zen-tabs-separator-color-light),          var(--zen-tabs-separator-color-dark));
 }
 
 /* ============================================================================
@@ -164,34 +161,3 @@ tab-group[split-view-group] .tabbrowser-tab {
   min-height: var(--zen-tabs-split-tab-height, 40px) !important;
 }
 
-/* ------------------------------------------------------------------
-   SEPARATOR between pinned/essential and normal tabs
-   ------------------------------------------------------------------ */
-
-/* Hide Zen's default separator unconditionally */
-.vertical-pinned-tabs-container-separator,
-.pinned-tabs-container-separator {
-  display: none !important;
-}
-
-/* Create our own separator using a ::after pseudo-element on the pinned container.
-   This is more reliable than trying to style the existing separator element. */
-@media (-moz-bool-pref: "zen.tabs.separator-enabled") {
-  #vertical-pinned-tabs-container {
-    position: relative !important;
-    padding-bottom: var(--zen-tabs-separator-margin-top, 4px) !important;
-    margin-bottom: var(--zen-tabs-separator-margin-bottom, 4px) !important;
-  }
-
-  #vertical-pinned-tabs-container::after {
-    content: "" !important;
-    position: absolute !important;
-    bottom: 0 !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: calc(100% - var(--zen-tabs-separator-indent, 16px)) !important;
-    height: var(--zen-tabs-separator-thickness, 1px) !important;
-    background-color: var(--bzt-separator) !important;
-    pointer-events: none !important;
-  }
-}
