@@ -2608,10 +2608,12 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   };
 
   // Build a single inline button element.
+  // Uses HTML <button> because the separator lives in an HTML context
+  // within Zen's sidebar — XUL toolbarbutton won't render there.
   const createInlineButton = (action, label, iconSvg) => {
-    const btn = document.createXULElement("toolbarbutton");
+    const btn = document.createElement("button");
     btn.className = "tidy-tabs-inline-btn";
-    btn.setAttribute("tooltiptext", label);
+    btn.title = label;
     btn.dataset.action = action;
 
     // Build inner content based on style preference
@@ -2619,10 +2621,17 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     const iconUri = svgInlineToDataURI(iconSvg);
 
     if (style === "icons") {
-      btn.setAttribute("image", iconUri);
+      const img = document.createElement("img");
+      img.src = iconUri;
+      img.className = "btn-icon";
+      img.setAttribute("alt", label);
+      btn.appendChild(img);
     } else if (style === "both") {
-      btn.setAttribute("image", iconUri);
-      // We'll add a text label via a child element
+      const img = document.createElement("img");
+      img.src = iconUri;
+      img.className = "btn-icon";
+      img.setAttribute("alt", "");
+      btn.appendChild(img);
       const labelEl = document.createElement("span");
       labelEl.className = "btn-label";
       labelEl.textContent = label;
@@ -2636,20 +2645,23 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     }
 
     // Wire up the action
-    switch (action) {
-      case "sort":
-        btn.addEventListener("command", () => sortTabsByTopic(false));
-        break;
-      case "clear":
-        btn.addEventListener("command", () => clearUngroupedTabs());
-        break;
-      case "group":
-        btn.addEventListener("command", () => sortTabsByTopic(false));
-        break;
-      case "ungroup":
-        btn.addEventListener("command", () => ungroupAllTabs());
-        break;
-    }
+    const clickHandler = () => {
+      switch (action) {
+        case "sort":
+          sortTabsByTopic(false);
+          break;
+        case "clear":
+          clearUngroupedTabs();
+          break;
+        case "group":
+          sortTabsByTopic(false);
+          break;
+        case "ungroup":
+          ungroupAllTabs();
+          break;
+      }
+    };
+    btn.addEventListener("click", clickHandler);
 
     return btn;
   };
@@ -3157,12 +3169,21 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
   // Extract dominant color from a tab's favicon via canvas sampling.
   // Caches by the favicon's src URL. Returns {r, g, b} or null.
+  // Uses the favicon URL from the tab's icon-image element, then loads
+  // it via a chrome-privileged Image to draw onto a canvas.
   const extractFaviconColor = (tab) => {
     try {
       const iconEl = tab?.querySelector(".tab-icon-image");
       if (!iconEl) return null;
 
-      const src = iconEl.getAttribute("src") || iconEl.style.listStyleImage;
+      // The icon src attribute holds the resolved favicon URL
+      let src = iconEl.getAttribute("src");
+      if (!src) {
+        // Fallback: extract URL from list-style-image CSS
+        const lsi = iconEl.style.listStyleImage || "";
+        const match = lsi.match(/url\(["']?(.*?)["']?\)/);
+        src = match ? match[1] : "";
+      }
       if (!src) return null;
 
       if (FAVICON_COLOR_CACHE.has(src)) return FAVICON_COLOR_CACHE.get(src);
@@ -3174,22 +3195,45 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       canvas.height = size;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-
-      // Synchronous fallback: try drawing from the icon element's current
-      // rendered state. If the image hasn't loaded yet, this returns empty.
+      // Try drawing the icon element directly (works when the image
+      // is already painted into the XUL box by the layout engine).
       try {
         ctx.drawImage(iconEl, 0, 0, size, size);
         const imageData = ctx.getImageData(0, 0, size, size);
-        const color = extractDominantColorFromImageData(imageData);
-        if (color) {
-          if (FAVICON_COLOR_CACHE.size >= FAVICON_CACHE_LIMIT) {
-            const oldest = FAVICON_COLOR_CACHE.keys().next().value;
-            FAVICON_COLOR_CACHE.delete(oldest);
+        // Check if we actually got non-transparent pixels
+        let hasPixels = false;
+        for (let i = 3; i < imageData.data.length; i += 4) {
+          if (imageData.data[i] > 10) { hasPixels = true; break; }
+        }
+        if (hasPixels) {
+          const color = extractDominantColorFromImageData(imageData);
+          if (color) {
+            if (FAVICON_COLOR_CACHE.size >= FAVICON_CACHE_LIMIT) {
+              const oldest = FAVICON_COLOR_CACHE.keys().next().value;
+              FAVICON_COLOR_CACHE.delete(oldest);
+            }
+            FAVICON_COLOR_CACHE.set(src, color);
+            return color;
           }
-          FAVICON_COLOR_CACHE.set(src, color);
-          return color;
+        }
+      } catch {}
+
+      // Fallback: load the favicon URL directly into an Image element.
+      // This works for chrome:// and resource:// URLs that the canvas
+      // can draw when the document has the right principal.
+      try {
+        const img = new Image();
+        img.src = src;
+        // If the image is already cached by the browser, draw immediately
+        if (img.complete && img.naturalWidth > 0) {
+          ctx.clearRect(0, 0, size, size);
+          ctx.drawImage(img, 0, 0, size, size);
+          const imageData = ctx.getImageData(0, 0, size, size);
+          const color = extractDominantColorFromImageData(imageData);
+          if (color) {
+            FAVICON_COLOR_CACHE.set(src, color);
+            return color;
+          }
         }
       } catch {}
 
@@ -3425,6 +3469,11 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         const ready = gBrowserReady && gZenWorkspacesReady;
 
         if (ready) {
+          // Reload preferences so CONFIG reflects user settings before
+          // injecting UI elements that depend on config gates.
+          const freshConfig = loadRuntimeConfig();
+          Object.keys(freshConfig).forEach((k) => (CONFIG[k] = freshConfig[k]));
+
           ensureSidebarContextMenu();
           setupgZenWorkspacesHooks();
           patchClearButtonToPreserveGroups();

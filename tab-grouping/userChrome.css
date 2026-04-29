@@ -154,7 +154,7 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   pointer-events: none;
 }
 
-/* Individual inline buttons */
+/* Individual inline buttons — HTML <button> elements */
 .tidy-tabs-inline-btn {
   appearance: none !important;
   -moz-appearance: none !important;
@@ -165,16 +165,26 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   margin: 0 !important;
   font-size: 11px !important;
   line-height: 1.2 !important;
-  color: var(--toolbar-color, gray) !important;
+  color: var(--sidebar-text-color, var(--toolbar-color, gray)) !important;
   opacity: 0;
   pointer-events: auto;
   cursor: pointer;
   transition: opacity 0.15s ease-in-out, background-color 0.2s ease, color 0.2s ease;
   min-width: auto !important;
+  width: auto !important;
   height: auto !important;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  vertical-align: middle;
+}
+
+.tidy-tabs-inline-btn img.btn-icon {
+  width: 14px;
+  height: 14px;
+  -moz-context-properties: fill, stroke;
+  fill: currentColor;
+  stroke: currentColor;
 }
 
 .tidy-tabs-inline-btn .btn-icon {
@@ -190,6 +200,10 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 
 /* --- Visibility: hover (default) --- */
 @media (-moz-bool-pref: "zen.tidytabs.ui.enable-inline-buttons") {
+  .pinned-tabs-container-separator:hover .tidy-tabs-button-container,
+  .vertical-pinned-tabs-container-separator:hover .tidy-tabs-button-container {
+    pointer-events: auto;
+  }
   .pinned-tabs-container-separator:hover .tidy-tabs-inline-btn,
   .vertical-pinned-tabs-container-separator:hover .tidy-tabs-inline-btn {
     opacity: 1;
@@ -203,6 +217,9 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 }
 
 /* JS-driven always-visible mode (class toggled by script) */
+.tidy-tabs-buttons-always .tidy-tabs-button-container {
+  pointer-events: auto !important;
+}
 .tidy-tabs-buttons-always .tidy-tabs-inline-btn {
   opacity: 1 !important;
 }
@@ -283,8 +300,13 @@ tab-group:not(zen-folder):not([split-view-group]) {
   --tab-group-tint-color: transparent;
 }
 
-/* Subtle background tint on the entire group */
+/* Subtle background tint on the entire group.
+   Must override the existing --tab-group-color: transparent rule
+   from the base styling above. */
 tab-group:not(zen-folder):not([split-view-group]).tidy-tabs-tinted {
+  --tab-group-color: var(--tab-group-tint-color) !important;
+  --tab-group-color-invert: var(--tab-group-tint-color) !important;
+  --tab-group-color-pale: var(--tab-group-tint-color) !important;
   background: var(--tab-group-tint-color) !important;
   border-radius: 6px !important;
   margin-inline: 2px !important;
