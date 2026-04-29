@@ -50,8 +50,8 @@
 }
 
 /* --- Sidebar context-menu (Tab Grouping) --- */
-menuitem.tab-grouping-menuitem > .menu-iconic-left > .menu-iconic-icon,
-menuitem.tab-grouping-menuitem .menu-iconic-icon {
+menuitem.tidy-tabs-menuitem > .menu-iconic-left > .menu-iconic-icon,
+menuitem.tidy-tabs-menuitem .menu-iconic-icon {
   width: 16px !important;
   height: 16px !important;
   max-width: 16px !important;
@@ -158,6 +158,15 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   pointer-events: none;
 }
 
+/* Hide Zen/native separator controls while our inline controls own this row.
+   This keeps the UI to only our themed icons + labels, without touching the
+   buttons nested inside .tidy-tabs-button-container. */
+.tidy-tabs-inline-active > toolbarbutton,
+.tidy-tabs-inline-active > button:not(.tidy-tabs-inline-btn),
+.tidy-tabs-inline-active > image {
+  display: none !important;
+}
+
 /* Individual inline buttons — HTML <button> elements */
 .tidy-tabs-inline-btn {
   appearance: none !important;
@@ -183,9 +192,21 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   flex-shrink: 0;
 }
 
-.tidy-tabs-inline-btn img.btn-icon {
+.tidy-tabs-inline-btn .btn-icon {
   width: 14px;
   height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.tidy-tabs-inline-btn .tidy-tabs-inline-icon,
+.tidy-tabs-inline-btn .btn-icon > svg {
+  width: 14px;
+  height: 14px;
+  color: currentColor;
+  stroke: currentColor;
   pointer-events: none;
 }
 
@@ -195,7 +216,7 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 }
 
 /* When both icon + label are present, add spacing */
-.tidy-tabs-inline-btn img.btn-icon + .btn-label {
+.tidy-tabs-inline-btn .btn-icon + .btn-label {
   margin-inline-start: 4px;
 }
 
@@ -210,14 +231,14 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 /* --- Visibility: HOVER mode (default) --------------------------- */
 /* Reveal the container only when the separator is hovered. */
 .pinned-tabs-container-separator:hover .tidy-tabs-button-container {
-  max-width: 220px;
+  max-width: 260px;
   opacity: 1;
   pointer-events: auto;
 }
 
 /* --- Visibility: ALWAYS mode (JS adds .tidy-tabs-buttons-always) */
 .tidy-tabs-buttons-always .tidy-tabs-button-container {
-  max-width: 220px !important;
+  max-width: 260px !important;
   opacity: 1 !important;
   pointer-events: auto !important;
 }
@@ -233,7 +254,7 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 }
 
 /* --- Button style: TEXT only --- */
-.tidy-tabs-btn-style-text .tidy-tabs-inline-btn img.btn-icon {
+.tidy-tabs-btn-style-text .tidy-tabs-inline-btn .btn-icon {
   display: none !important;
 }
 
@@ -244,26 +265,32 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
    its visibility via three class-based modes set by JS.
    ================================================================ */
 
-.pinned-tabs-container-separator svg {
+.pinned-tabs-container-separator > svg {
   transition: opacity 0.2s ease, width 0.2s ease;
 }
 
 /* Mode: HOVER (default) — line is visible normally, but fades when
    buttons appear so the row stays clean. */
-.pinned-tabs-container-separator:hover svg {
+.tidy-tabs-separator-hover:hover > svg {
   opacity: 0.4;
 }
 
 /* Mode: ALWAYS — line is full-strength even on hover */
-.tidy-tabs-separator-always svg,
-.tidy-tabs-separator-always:hover svg {
+.tidy-tabs-separator-always > svg,
+.tidy-tabs-separator-always:hover > svg {
   opacity: 1 !important;
+  visibility: visible !important;
+  width: 100% !important;
 }
 
 /* Mode: HIDDEN — line never shows */
-.tidy-tabs-separator-hidden svg {
+.tidy-tabs-separator-hidden > svg {
   opacity: 0 !important;
   visibility: hidden !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  margin-inline: 0 !important;
+  flex-grow: 0 !important;
 }
 
 /* ================================================================

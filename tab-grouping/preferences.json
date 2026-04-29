@@ -176,22 +176,22 @@
         "property": "zen.tidytabs.ui.inline-button-style",
         "label": "Button display style",
         "type": "dropdown",
-        "defaultValue": "text",
+        "defaultValue": "both",
         "options": [
-          { "label": "Text labels", "value": "text" },
-          { "label": "Icons only", "value": "icons" },
-          { "label": "Text + Icons", "value": "both" }
+          { "label": "Icons + labels (recommended)", "value": "both" },
+          { "label": "Icons only (compact)", "value": "icons" },
+          { "label": "Labels only", "value": "text" }
         ]
       },
       {
         "property": "zen.tidytabs.ui.separator-line-mode",
-        "label": "Separator line behavior",
+        "label": "Native separator line",
         "type": "dropdown",
-        "defaultValue": "hover",
+        "defaultValue": "hidden",
         "options": [
-          { "label": "Always show line", "value": "always" },
-          { "label": "Hide line on hover (when buttons appear)", "value": "hover" },
-          { "label": "Always hide line", "value": "hidden" }
+          { "label": "Hide line (buttons/labels only)", "value": "hidden" },
+          { "label": "Show line, fade on hover", "value": "hover" },
+          { "label": "Always show line", "value": "always" }
         ]
       },
 
@@ -202,27 +202,27 @@
     },
       {
         "property": "zen.tidytabs.ui.show-sort-button",
-        "label": "Show Sort button (auto-group untidy tabs)",
+        "label": "Show Tidy button (auto-group loose tabs)",
         "type": "checkbox",
         "defaultValue": true
       },
       {
         "property": "zen.tidytabs.ui.show-clear-button",
-        "label": "Show Clear button (close ungrouped tabs)",
+        "label": "Show Close Loose button (closes ungrouped tabs only)",
         "type": "checkbox",
         "defaultValue": true
       },
       {
         "property": "zen.tidytabs.ui.show-group-button",
-        "label": "Show Group button (alias for sort)",
+        "label": "Show Group button (same action as Tidy)",
         "type": "checkbox",
         "defaultValue": false
       },
       {
         "property": "zen.tidytabs.ui.show-ungroup-button",
-        "label": "Show Ungroup button (dissolve all groups)",
+        "label": "Show Ungroup button (keeps tabs open)",
         "type": "checkbox",
-        "defaultValue": false
+        "defaultValue": true
       },
 
   {

@@ -54,13 +54,13 @@
     PROTECTED_HOSTS: "",
     // Inline action buttons on the pinned/normal separator
     ENABLE_INLINE_BUTTONS: false,
-    INLINE_BUTTON_STYLE: "text",          // "text" | "icons" | "both"
+    INLINE_BUTTON_STYLE: "both",          // "text" | "icons" | "both"
     INLINE_BUTTON_VISIBILITY: "hover",    // "always" | "hover" | "hidden"
     SHOW_SORT_BUTTON: true,
     SHOW_CLEAR_BUTTON: true,
     SHOW_GROUP_BUTTON: false,
-    SHOW_UNGROUP_BUTTON: false,
-    SEPARATOR_LINE_MODE: "hover",         // "always" | "hover" | "hidden"
+    SHOW_UNGROUP_BUTTON: true,
+    SEPARATOR_LINE_MODE: "hidden",        // "always" | "hover" | "hidden"
     // Subtle group/folder background and label tint from favicon colors
     ENABLE_GROUP_BG_TINT: false,
     ENABLE_GROUP_LABEL_TINT: false,
@@ -785,7 +785,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   const processTabGroup = (group) => {
     if (
       !group?.isConnected ||
-      group.hasAttribute("data-tidy-tabs-processed") ||
       group.classList.contains("zen-folder") ||
       group.hasAttribute("zen-folder") ||
       group.hasAttribute("split-view-group")
@@ -796,6 +795,14 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     const labelContainer = group.querySelector(".tab-group-label-container");
     if (!labelContainer) return;
 
+    labelContainer.querySelectorAll(".tab-close-button.close-icon").forEach((button) => {
+      try { button.remove(); } catch {}
+    });
+
+    if (group.hasAttribute("data-tidy-tabs-processed")) {
+      return;
+    }
+
     // Remove editor-mode class that blocks collapse clicks
     group.classList.remove("tab-group-editor-mode-create");
 
@@ -803,7 +810,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     labelContainer.removeAttribute("context");
     group.removeAttribute("context");
 
-    // Inject collapse-toggle marker if absent
+    // Inject collapse-toggle marker if absent. We intentionally do NOT add
+    // a group close button: this mod's destructive action is the explicit
+    // inline "Close Loose" control, and ungrouping must never close tabs.
     if (!labelContainer.querySelector(".group-marker")) {
       try {
         const frag =
@@ -811,14 +820,11 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
             `<div class="tab-group-icon-container">\n` +
             `  <div class="tab-group-icon"></div>\n` +
             `  <image class="group-marker" role="button" keyNav="false" tooltiptext="Toggle Group"/>\n` +
-            `</div>\n` +
-            `<image class="tab-close-button close-icon" role="button" keyNav="false" tooltiptext="Close Group"/>`
+            `</div>\n`
           );
         if (frag) {
           const iconContainer = frag.children[0];
-          const closeButton = frag.children[1];
           labelContainer.insertBefore(iconContainer, labelContainer.firstChild);
-          labelContainer.appendChild(closeButton);
         }
       } catch (e) {
         // Fallback: standard DOM marker if XUL parsing fails
@@ -834,7 +840,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
   const processExistingTabGroups = () => {
     const groups = document.querySelectorAll(
-      'tab-group:not([data-tidy-tabs-processed]):not([split-view-group]):not([zen-folder])'
+      'tab-group:not([split-view-group]):not([zen-folder])'
     );
     groups.forEach((group) => processTabGroup(group));
   };
@@ -2546,53 +2552,134 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   // the pinned/normal separator. Visibility, style, and which buttons appear
   // are all controlled via preferences (off by default).
 
-  // Lucide-style SVG icons for inline buttons (14×14, stroke-based)
-  const INLINE_BTN_ICONS = {
-    sort: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M3 12h12"/><path d="M3 18h6"/></svg>`,
-    clear: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
-    group: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="2" y="2" rx="1"/><rect width="8" height="8" x="14" y="2" rx="1"/><rect width="8" height="8" x="2" y="14" rx="1"/><rect width="8" height="8" x="14" y="14" rx="1"/></svg>`,
-    ungroup: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="2" y="2" rx="1"/><rect width="8" height="8" x="14" y="14" rx="1"/><path d="M14 2h8v8"/><path d="M2 14l12 12"/></svg>`,
+  const INLINE_ACTION_ICON_KEYS = {
+    sort: "groups",
+    clear: "clear",
+    group: "groups",
+    ungroup: "ungroup",
   };
 
-  const svgInlineToDataURI = (svg) => {
-    try { return "data:image/svg+xml;base64," + btoa(svg); } catch { return ""; }
+  const createInlineIconElement = (iconKey, label) => {
+    const iconWrap = document.createElement("span");
+    iconWrap.className = "btn-icon";
+    iconWrap.setAttribute("aria-hidden", "true");
+
+    const template = TIDY_TABS_ICON_SVGS[iconKey];
+    if (!template) return iconWrap;
+
+    try {
+      const svg = template
+        .replace(/\{\{STROKE\}\}/g, "currentColor")
+        .replace(/width="16"/, 'width="14"')
+        .replace(/height="16"/, 'height="14"');
+      const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+      const svgEl = document.importNode(parsed.documentElement, true);
+      svgEl.classList.add("tidy-tabs-inline-icon");
+      svgEl.setAttribute("focusable", "false");
+      svgEl.setAttribute("aria-label", label);
+      iconWrap.appendChild(svgEl);
+    } catch {}
+
+    return iconWrap;
+  };
+
+  const getTabVisualIndex = (tab) => {
+    try {
+      const tabs = Array.from(gBrowser?.tabs || []);
+      const index = tabs.indexOf(tab);
+      return index >= 0 ? index : tabs.length - 1;
+    } catch {
+      return -1;
+    }
+  };
+
+  const releaseGroupedTab = (tab, groupEl) => {
+    if (!tab?.isConnected || !groupEl?.isConnected) return false;
+
+    const wasPinned = !!tab.pinned;
+    const wasInGroup = getTabContainerGroup(tab);
+    const isReleased = () => {
+      const currentGroup = getTabContainerGroup(tab);
+      return !currentGroup || currentGroup !== groupEl || !groupEl.contains(tab);
+    };
+
+    const attempts = [
+      () => groupEl.removeTabs?.([tab]),
+      () => groupEl.removeTab?.(tab),
+      () => wasInGroup?.removeTabs?.([tab]),
+      () => wasInGroup?.removeTab?.(tab),
+      () => gBrowser.removeTabFromGroup?.(tab),
+      () => gBrowser.ungroupTabs?.([tab]),
+      () => {
+        if (wasPinned) gBrowser.unpinTab(tab);
+      },
+      () => {
+        const index = getTabVisualIndex(tab);
+        if (index >= 0) gBrowser.moveTabTo(tab, index);
+      },
+    ];
+
+    for (const attempt of attempts) {
+      try {
+        attempt();
+        if (isReleased()) return true;
+      } catch {}
+    }
+
+    return isReleased();
   };
 
   // Ungroup all tabs in the current workspace: removes each tab from its
-  // group/folder so they become loose again.
+  // group/folder so they become loose again. This is intentionally
+  // non-destructive: it never calls removeTabs/removeTabGroup on gBrowser,
+  // because those APIs may close tabs depending on browser version.
   const ungroupAllTabs = () => {
     const workspaceId = window.gZenWorkspaces?.activeWorkspace;
     if (!workspaceId) return;
 
-    const groups = getWorkspaceGroupElements(workspaceId);
+    const groups = getWorkspaceGroupElements(workspaceId).sort((a, b) => {
+      const aNested = a.querySelectorAll(GROUP_NODE_SELECTOR).length;
+      const bNested = b.querySelectorAll(GROUP_NODE_SELECTOR).length;
+      return bNested - aNested;
+    });
     for (const groupEl of groups) {
       if (groupEl.hasAttribute("split-view-group")) continue;
       try {
         const tabs = Array.from(groupEl.querySelectorAll("tab"))
           .filter(t => t?.isConnected);
-        if (isFolderGroupElement(groupEl)) {
-          // Zen folders: remove tabs from folder, then unpin
-          for (const tab of tabs) {
-            try {
-              if (tab.pinned) gBrowser.unpinTab(tab);
-            } catch {}
-          }
+
+        for (const tab of tabs) {
+          releaseGroupedTab(tab, groupEl);
+        }
+
+        const remainingTabs = Array.from(groupEl.querySelectorAll("tab"))
+          .filter(t => t?.isConnected);
+        if (remainingTabs.length === 0) {
           groupEl.remove();
         } else {
-          // Regular tab-group: use native ungroup
-          if (typeof gBrowser.removeTabGroup === "function") {
-            gBrowser.removeTabGroup(groupEl, { animate: false });
-          } else {
-            for (const tab of tabs) {
-              try { gBrowser.moveTabTo(tab, gBrowser.tabs.length - 1); } catch {}
-            }
+          console.warn(
+            `[TidyTabs] Ungroup skipped container removal because ${remainingTabs.length} tab(s) are still attached.`
+          );
+        }
+
+        if (isFolderGroupElement(groupEl)) {
+          tabs.forEach((tab) => {
+            try { if (tab?.isConnected && tab.pinned) gBrowser.unpinTab(tab); } catch {}
+          });
+          if (remainingTabs.length === 0 && groupEl.isConnected) {
             groupEl.remove();
           }
+        } else if (remainingTabs.length === 0 && groupEl.isConnected) {
+          groupEl.remove();
         }
       } catch (e) {
         console.warn(`[TidyTabs] Error ungrouping "${groupEl.getAttribute("label")}":`, e);
       }
     }
+
+    domCache.invalidate();
+    injectInlineButtons();
+    applyGroupTints();
   };
 
   // Close all ungrouped, non-pinned, non-selected, non-empty tabs in the
@@ -2618,28 +2705,21 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   // Build a single inline button element.
   // Uses HTML <button> because the separator lives in an HTML context
   // within Zen's sidebar — XUL toolbarbutton won't render there.
-  const createInlineButton = (action, label, iconSvg) => {
+  const createInlineButton = (action, label, iconKey, tooltip = label) => {
     const btn = document.createElement("button");
     btn.className = "tidy-tabs-inline-btn";
-    btn.title = label;
+    btn.type = "button";
+    btn.title = tooltip;
+    btn.setAttribute("aria-label", tooltip);
     btn.dataset.action = action;
 
     // Build inner content based on style preference
     const style = CONFIG.INLINE_BUTTON_STYLE || "text";
-    const iconUri = svgInlineToDataURI(iconSvg);
 
     if (style === "icons") {
-      const img = document.createElement("img");
-      img.src = iconUri;
-      img.className = "btn-icon";
-      img.setAttribute("alt", label);
-      btn.appendChild(img);
+      btn.appendChild(createInlineIconElement(iconKey, label));
     } else if (style === "both") {
-      const img = document.createElement("img");
-      img.src = iconUri;
-      img.className = "btn-icon";
-      img.setAttribute("alt", "");
-      btn.appendChild(img);
+      btn.appendChild(createInlineIconElement(iconKey, label));
       const labelEl = document.createElement("span");
       labelEl.className = "btn-label";
       labelEl.textContent = label;
@@ -2653,16 +2733,18 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     }
 
     // Wire up the action
-    const clickHandler = () => {
+    const clickHandler = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       switch (action) {
         case "sort":
-          sortTabsByTopic(false);
+          sortTabsByTopic(false).catch?.((e) => console.error("[TidyTabs] Sort failed:", e));
           break;
         case "clear":
           clearUngroupedTabs();
           break;
         case "group":
-          sortTabsByTopic(false);
+          sortTabsByTopic(false).catch?.((e) => console.error("[TidyTabs] Group failed:", e));
           break;
         case "ungroup":
           ungroupAllTabs();
@@ -2677,10 +2759,38 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   // Determine which buttons to show based on config.
   const getInlineButtonDefs = () => {
     const defs = [];
-    if (CONFIG.SHOW_SORT_BUTTON)   defs.push({ action: "sort",    label: "Sort",   icon: INLINE_BTN_ICONS.sort });
-    if (CONFIG.SHOW_CLEAR_BUTTON)  defs.push({ action: "clear",   label: "Clear",  icon: INLINE_BTN_ICONS.clear });
-    if (CONFIG.SHOW_GROUP_BUTTON)  defs.push({ action: "group",   label: "Group",  icon: INLINE_BTN_ICONS.group });
-    if (CONFIG.SHOW_UNGROUP_BUTTON) defs.push({ action: "ungroup", label: "Ungroup", icon: INLINE_BTN_ICONS.ungroup });
+    if (CONFIG.SHOW_SORT_BUTTON) {
+      defs.push({
+        action: "sort",
+        label: "Tidy",
+        icon: INLINE_ACTION_ICON_KEYS.sort,
+        tooltip: "Tidy tabs into groups",
+      });
+    }
+    if (CONFIG.SHOW_CLEAR_BUTTON) {
+      defs.push({
+        action: "clear",
+        label: "Close Loose",
+        icon: INLINE_ACTION_ICON_KEYS.clear,
+        tooltip: "Close ungrouped tabs only",
+      });
+    }
+    if (CONFIG.SHOW_GROUP_BUTTON) {
+      defs.push({
+        action: "group",
+        label: "Group",
+        icon: INLINE_ACTION_ICON_KEYS.group,
+        tooltip: "Group loose tabs",
+      });
+    }
+    if (CONFIG.SHOW_UNGROUP_BUTTON) {
+      defs.push({
+        action: "ungroup",
+        label: "Ungroup",
+        icon: INLINE_ACTION_ICON_KEYS.ungroup,
+        tooltip: "Ungroup grouped tabs without closing them",
+      });
+    }
     return defs;
   };
 
@@ -2708,7 +2818,8 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       if (existing) existing.remove();
 
       // Apply visibility class
-      sep.classList.remove("tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden");
+      sep.classList.remove("tidy-tabs-inline-active", "tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden");
+      sep.classList.add("tidy-tabs-inline-active");
       if (visibility === "always") sep.classList.add("tidy-tabs-buttons-always");
       if (visibility === "hidden") sep.classList.add("tidy-tabs-buttons-hidden");
 
@@ -2717,16 +2828,17 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       sep.classList.add(`tidy-tabs-btn-style-${style}`);
 
       // Apply separator line mode class
-      sep.classList.remove("tidy-tabs-separator-always", "tidy-tabs-separator-hidden");
+      sep.classList.remove("tidy-tabs-separator-always", "tidy-tabs-separator-hover", "tidy-tabs-separator-hidden");
       if (lineMode === "always") sep.classList.add("tidy-tabs-separator-always");
-      if (lineMode === "hidden") sep.classList.add("tidy-tabs-separator-hidden");
+      else if (lineMode === "hover") sep.classList.add("tidy-tabs-separator-hover");
+      else if (lineMode === "hidden") sep.classList.add("tidy-tabs-separator-hidden");
 
       // Build button container
       const container = document.createElement("div");
       container.className = "tidy-tabs-button-container";
 
       for (const def of buttonDefs) {
-        const btn = createInlineButton(def.action, def.label, def.icon);
+        const btn = createInlineButton(def.action, def.label, def.icon, def.tooltip);
         container.appendChild(btn);
       }
 
@@ -2742,9 +2854,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     const seps = document.querySelectorAll(".pinned-tabs-container-separator");
     seps.forEach(sep => {
       sep.classList.remove(
-        "tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden",
+        "tidy-tabs-inline-active", "tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden",
         "tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both",
-        "tidy-tabs-separator-always", "tidy-tabs-separator-hidden"
+        "tidy-tabs-separator-always", "tidy-tabs-separator-hover", "tidy-tabs-separator-hidden"
       );
     });
   };
@@ -2798,6 +2910,12 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     // folder-tree
     folders:
       `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>`,
+    // x
+    clear:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
+    // ungroup
+    ungroup:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8a2 2 0 0 1 2-2h3"/><path d="M17 16a2 2 0 0 1-2 2h-3"/><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/></svg>`,
   };
 
   // Pick a stroke color that reads well on the current menu background.
@@ -2999,9 +3117,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
               });
               applyGroupTints();
               // Context menu toggle
-              if (!CONFIG.ENABLE_CONTEXT_MENU && sidebarMenuListenersAdded) {
+              if (sidebarMenuListenersAdded) {
                 teardownSidebarContextMenu();
-              } else if (CONFIG.ENABLE_CONTEXT_MENU && !sidebarMenuListenersAdded) {
+              }
+              if (CONFIG.ENABLE_CONTEXT_MENU) {
                 ensureSidebarContextMenu();
               }
             } catch (e) {
