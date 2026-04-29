@@ -127,3 +127,204 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
     transition: opacity 0.2s ease-out;
   }
 }
+
+/* ================================================================
+   Inline Action Buttons on Separator
+   ================================================================ */
+
+/* Base separator positioning context */
+.pinned-tabs-container-separator {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column;
+  overflow: visible !important;
+}
+
+/* Button container for the right-aligned buttons */
+.tidy-tabs-button-container {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Individual inline buttons */
+.tidy-tabs-inline-btn {
+  appearance: none !important;
+  -moz-appearance: none !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+  margin: 0 !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  color: var(--toolbar-color, gray) !important;
+  opacity: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.15s ease-in-out, background-color 0.2s ease, color 0.2s ease;
+  min-width: auto !important;
+  height: auto !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tidy-tabs-inline-btn .btn-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+}
+
+.tidy-tabs-inline-btn .btn-label {
+  display: inline;
+  margin-inline-start: 3px;
+}
+
+/* --- Visibility: hover (default) --- */
+@media (-moz-bool-pref: "zen.tidytabs.ui.enable-inline-buttons") {
+  .pinned-tabs-container-separator:hover .tidy-tabs-inline-btn,
+  .vertical-pinned-tabs-container-separator:hover .tidy-tabs-inline-btn {
+    opacity: 1;
+  }
+}
+
+/* --- Visibility: always --- */
+@media (-moz-bool-pref: "zen.tidytabs.ui.enable-inline-buttons") and (-moz-bool-pref: "zen.tidytabs.ui.inline-button-visibility") {
+  /* Note: "always" pref value is stored as string; CSS bool-pref only checks existence.
+     The JS toggles a class on the separator for "always" mode. */
+}
+
+/* JS-driven always-visible mode (class toggled by script) */
+.tidy-tabs-buttons-always .tidy-tabs-inline-btn {
+  opacity: 1 !important;
+}
+
+/* Button hover state */
+.tidy-tabs-inline-btn:hover {
+  background-color: var(--toolbarbutton-hover-background, rgba(200, 200, 200, 0.25)) !important;
+  color: var(--toolbar-color, white) !important;
+}
+
+/* Active/pressed state */
+.tidy-tabs-inline-btn:active {
+  background-color: var(--toolbarbutton-active-background, rgba(150, 150, 150, 0.35)) !important;
+}
+
+/* Hide buttons when visibility mode is "hidden" */
+.tidy-tabs-buttons-hidden .tidy-tabs-inline-btn {
+  display: none !important;
+}
+
+/* --- Button style: icons only --- */
+.tidy-tabs-btn-style-icons .tidy-tabs-inline-btn .btn-label {
+  display: none !important;
+}
+
+/* --- Button style: text only --- */
+.tidy-tabs-btn-style-text .tidy-tabs-inline-btn .btn-icon {
+  display: none !important;
+}
+
+/* ================================================================
+   Separator Line Modes
+   ================================================================ */
+
+/* Default: the SVG line inside the separator */
+.pinned-tabs-container-separator svg {
+  transition: width 0.15s ease-in-out, opacity 0.2s ease;
+}
+
+/* Mode: hover — line shrinks when buttons appear */
+@media (-moz-bool-pref: "zen.tidytabs.ui.enable-inline-buttons") {
+  .pinned-tabs-container-separator:hover svg,
+  .vertical-pinned-tabs-container-separator:hover svg {
+    width: calc(100% - 80px) !important;
+    margin-right: auto !important;
+  }
+  
+  /* When more buttons are shown, shrink more */
+  .pinned-tabs-container-separator:has(.tidy-tabs-button-container > :nth-child(3)):hover svg,
+  .pinned-tabs-container-separator:has(.tidy-tabs-button-container > :nth-child(4)):hover svg {
+    width: calc(100% - 130px) !important;
+  }
+}
+
+/* Mode: hidden — never show the line */
+.tidy-tabs-separator-hidden svg,
+.tidy-tabs-separator-hidden::before,
+.tidy-tabs-separator-hidden::after {
+  display: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+}
+
+/* Mode: always — line always visible (default behavior) */
+.tidy-tabs-separator-always svg {
+  opacity: 1 !important;
+}
+
+/* ================================================================
+   Group Background Tint from Favicon Color
+   ================================================================ */
+
+/* When enabled, each tab-group gets a subtle background color derived
+   from its tabs' favicon. The JS computes the color and stores it in
+   --tab-group-tint-color; we apply it here with the user's chosen opacity. */
+tab-group:not(zen-folder):not([split-view-group]) {
+  --tab-group-tint-opacity: 0.15;
+  --tab-group-tint-color: transparent;
+}
+
+/* Subtle background tint on the entire group */
+tab-group:not(zen-folder):not([split-view-group]).tidy-tabs-tinted {
+  background: var(--tab-group-tint-color) !important;
+  border-radius: 6px !important;
+  margin-inline: 2px !important;
+  padding-block: 2px !important;
+}
+
+/* Subtle tint on the label container */
+tab-group:not(zen-folder):not([split-view-group]).tidy-tabs-tinted > .tab-group-label-container {
+  background: transparent !important;
+}
+
+/* Subtle tint on individual tabs within the group */
+tab-group:not(zen-folder):not([split-view-group]).tidy-tabs-tinted .tabbrowser-tab {
+  background: transparent !important;
+}
+
+/* ================================================================
+   Tab Close Animation (fadeUp)
+   ================================================================ */
+
+.tab-closing {
+  animation: fadeUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes fadeUp {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-16px);
+    max-height: 0px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+  }
+}
+
+/* Smooth transitions for tabs */
+.tabbrowser-tab {
+  transition: transform 0.3s ease-out, opacity 0.3s ease-out, max-height 0.4s ease-out, margin 0.4s ease-out;
+}

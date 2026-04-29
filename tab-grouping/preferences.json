@@ -94,5 +94,97 @@
       "type": "checkbox",
       "disabledOn": [],
       "defaultValue": true
+    },
+    {
+      "property": "zen.tidytabs.ui.enable-inline-buttons",
+      "label": "Enable inline action buttons on separator",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": false
+    },
+    {
+      "property": "zen.tidytabs.ui.inline-button-style",
+      "label": "Inline button display style",
+      "type": "dropdown",
+      "disabledOn": [],
+      "defaultValue": "text",
+      "options": [
+        { "label": "Text labels", "value": "text" },
+        { "label": "Icons only", "value": "icons" },
+        { "label": "Text + Icons", "value": "both" }
+      ]
+    },
+    {
+      "property": "zen.tidytabs.ui.inline-button-visibility",
+      "label": "Button visibility mode",
+      "type": "dropdown",
+      "disabledOn": [],
+      "defaultValue": "hover",
+      "options": [
+        { "label": "Always visible", "value": "always" },
+        { "label": "Show on hover", "value": "hover" },
+        { "label": "Hidden", "value": "hidden" }
+      ]
+    },
+    {
+      "property": "zen.tidytabs.ui.show-sort-button",
+      "label": "Show Sort button on separator",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": true
+    },
+    {
+      "property": "zen.tidytabs.ui.show-clear-button",
+      "label": "Show Clear button on separator",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": true
+    },
+    {
+      "property": "zen.tidytabs.ui.show-group-button",
+      "label": "Show Group button on separator",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": false
+    },
+    {
+      "property": "zen.tidytabs.ui.show-ungroup-button",
+      "label": "Show Ungroup button on separator",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": false
+    },
+    {
+      "property": "zen.tidytabs.ui.separator-line-mode",
+      "label": "Separator line mode",
+      "type": "dropdown",
+      "disabledOn": [],
+      "defaultValue": "hover",
+      "options": [
+        { "label": "Always show line", "value": "always" },
+        { "label": "Show on hover", "value": "hover" },
+        { "label": "Hide line completely", "value": "hidden" }
+      ]
+    },
+    {
+      "property": "zen.tidytabs.ui.enable-group-bg-tint",
+      "label": "Enable subtle group background tint from favicon color",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": false
+    },
+    {
+      "property": "zen.tidytabs.ui.group-bg-opacity",
+      "label": "Group background tint opacity (0.0 - 1.0)",
+      "type": "string",
+      "disabledOn": [],
+      "defaultValue": "0.15"
+    },
+    {
+      "property": "zen.tidytabs.ui.enable-context-menu",
+      "label": "Enable right-click context menu for tab groups",
+      "type": "checkbox",
+      "disabledOn": [],
+      "defaultValue": true
     }
   ]

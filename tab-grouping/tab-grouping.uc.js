@@ -52,6 +52,20 @@
     // Optional comma/newline-separated host list that should stay loose
     // (never auto-grouped), e.g. "mail.google.com, calendar.google.com".
     PROTECTED_HOSTS: "",
+    // Inline action buttons on the pinned/normal separator
+    ENABLE_INLINE_BUTTONS: false,
+    INLINE_BUTTON_STYLE: "text",          // "text" | "icons" | "both"
+    INLINE_BUTTON_VISIBILITY: "hover",    // "always" | "hover" | "hidden"
+    SHOW_SORT_BUTTON: true,
+    SHOW_CLEAR_BUTTON: true,
+    SHOW_GROUP_BUTTON: false,
+    SHOW_UNGROUP_BUTTON: false,
+    SEPARATOR_LINE_MODE: "hover",         // "always" | "hover" | "hidden"
+    // Subtle group background tint extracted from favicon colors
+    ENABLE_GROUP_BG_TINT: false,
+    GROUP_BG_OPACITY: 0.15,
+    // Context menu for tab groups
+    ENABLE_CONTEXT_MENU: true,
   };
 
   const hasMeaningfulTitleSignal = (title) => {
