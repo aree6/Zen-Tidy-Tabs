@@ -3,7 +3,7 @@
   "name": "Better Zen Tabs",
   "description": "Granular tab border and behaviour styling for Zen Browser. Control borders, hover states, transparency, and indicators per tab type: normal, pinned, essential, and split.",
   "author": "aree6",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "homepage": "https://github.com/aree6/Zen-Tidy-Tabs/tree/main/Better_Zen_Tabs",
   "style": {
     "chrome": "userChrome.css"
