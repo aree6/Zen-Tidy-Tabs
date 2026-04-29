@@ -120,13 +120,13 @@
       },
       {
         "property": "zen.tidytabs.menu.sort-groups",
-        "label": "Show 'Tidy Tabs into Groups' menu item",
+        "label": "Show 'Groups' menu item",
         "type": "checkbox",
         "defaultValue": true
       },
       {
         "property": "zen.tidytabs.menu.sort-folders",
-        "label": "Show 'Tidy Tabs into Folders' menu item",
+        "label": "Show 'Folders' menu item",
         "type": "checkbox",
         "defaultValue": true
       },
@@ -185,14 +185,21 @@
       },
       {
         "property": "zen.tidytabs.ui.separator-line-mode",
-        "label": "Native separator line",
+        "label": "Native separator line (fades in on hover)",
         "type": "dropdown",
         "defaultValue": "hidden",
         "options": [
-          { "label": "Hide line (buttons/labels only)", "value": "hidden" },
+          { "label": "None (buttons/labels only)", "value": "hidden" },
           { "label": "Show line, fade on hover", "value": "hover" },
           { "label": "Always show line", "value": "always" }
         ]
+      },
+      {
+        "property": "zen.tidytabs.ui.inline-icon-size",
+        "label": "Inline icon size (12–32 px)",
+        "type": "string",
+        "defaultValue": "18",
+        "placeholder": "e.g. 18"
       },
 
     {
@@ -202,7 +209,7 @@
     },
       {
         "property": "zen.tidytabs.ui.show-sort-button",
-        "label": "Show Tidy button (auto-group loose tabs)",
+        "label": "Show Groups button (group tabs)",
         "type": "checkbox",
         "defaultValue": true
       },
@@ -214,13 +221,13 @@
       },
       {
         "property": "zen.tidytabs.ui.show-group-button",
-        "label": "Show Group button (same action as Tidy)",
+        "label": "Show Folders button (folder tabs)",
         "type": "checkbox",
-        "defaultValue": false
+        "defaultValue": true
       },
       {
         "property": "zen.tidytabs.ui.show-ungroup-button",
-        "label": "Show Ungroup button (keeps tabs open)",
+        "label": "Show Unsort button (keeps tabs open)",
         "type": "checkbox",
         "defaultValue": true
       },

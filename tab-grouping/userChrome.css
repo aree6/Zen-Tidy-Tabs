@@ -2,16 +2,29 @@
   overflow: visible !important;
 }
 
-.pinned-tabs-container-separator svg {
+.pinned-tabs-container-separator.tidy-tabs-inline-active {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.pinned-tabs-container-separator svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator .tidy-tabs-separator-line {
   width: 100% !important;
   height: 1px;
   min-height: 1px !important;
   display: block;
   overflow: visible;
-  transition: width 0.15s ease-in-out;
   min-width: 0;
   margin: auto 4px !important;
   flex-grow: 1;
+  opacity: 0.35;
+  transition: opacity 0.15s ease-in-out, width 0.15s ease-in-out;
+}
+
+.pinned-tabs-container-separator:hover svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator:hover .tidy-tabs-separator-line {
+  opacity: 1;
 }
 
 .pinned-tabs-container-separator.has-no-sortable-tabs {
@@ -23,7 +36,7 @@
   gap: 0 !important;
 }
 
-.pinned-tabs-container-separator.has-no-sortable-tabs svg {
+.pinned-tabs-container-separator.has-no-sortable-tabs svg:not(.tidy-tabs-inline-icon) {
   display: none !important;
   width: 0 !important;
   opacity: 0 !important;
@@ -92,6 +105,15 @@ tab-group:not(zen-folder) .tab-group-label {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   line-height: 1.4;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.45),
+    0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+zen-folder .tab-group-label {
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.45),
+    0 0 2px rgba(255, 255, 255, 0.35);
 }
 
 tab-group:not(zen-folder) .tab-group-label-container:hover .tab-group-label {
@@ -180,7 +202,8 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   line-height: 1.2 !important;
   color: var(--sidebar-text-color, var(--toolbar-color, currentColor)) !important;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  opacity: 0.58;
+  transition: opacity 0.15s ease, color 0.15s ease;
   min-width: 0 !important;
   width: auto !important;
   height: auto !important;
@@ -193,8 +216,8 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 }
 
 .tidy-tabs-inline-btn .btn-icon {
-  width: 14px;
-  height: 14px;
+  width: var(--tidy-tabs-inline-icon-size, 18px);
+  height: var(--tidy-tabs-inline-icon-size, 18px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -203,8 +226,8 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 
 .tidy-tabs-inline-btn .tidy-tabs-inline-icon,
 .tidy-tabs-inline-btn .btn-icon > svg {
-  width: 14px;
-  height: 14px;
+  width: var(--tidy-tabs-inline-icon-size, 18px);
+  height: var(--tidy-tabs-inline-icon-size, 18px);
   color: currentColor;
   stroke: currentColor;
   pointer-events: none;
@@ -222,10 +245,10 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 
 /* Button hover/active states */
 .tidy-tabs-inline-btn:hover {
-  background-color: var(--toolbarbutton-hover-background, rgba(128, 128, 128, 0.18)) !important;
+  opacity: 1;
 }
 .tidy-tabs-inline-btn:active {
-  background-color: var(--toolbarbutton-active-background, rgba(128, 128, 128, 0.28)) !important;
+  opacity: 0.82;
 }
 
 /* --- Visibility: HOVER mode (default) --------------------------- */
@@ -265,26 +288,36 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
    its visibility via three class-based modes set by JS.
    ================================================================ */
 
-.pinned-tabs-container-separator > svg {
+.pinned-tabs-container-separator > svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator .tidy-tabs-separator-line {
   transition: opacity 0.2s ease, width 0.2s ease;
 }
 
-/* Mode: HOVER (default) — line is visible normally, but fades when
-   buttons appear so the row stays clean. */
-.tidy-tabs-separator-hover:hover > svg {
-  opacity: 0.4;
+/* Mode: HOVER (default) — line is faint until hover. */
+.tidy-tabs-separator-hover > svg:not(.tidy-tabs-inline-icon),
+.tidy-tabs-separator-hover .tidy-tabs-separator-line {
+  opacity: 0.35;
+}
+
+.tidy-tabs-separator-hover:hover > svg:not(.tidy-tabs-inline-icon),
+.tidy-tabs-separator-hover:hover .tidy-tabs-separator-line {
+  opacity: 1;
 }
 
 /* Mode: ALWAYS — line is full-strength even on hover */
-.tidy-tabs-separator-always > svg,
-.tidy-tabs-separator-always:hover > svg {
+.tidy-tabs-separator-always > svg:not(.tidy-tabs-inline-icon),
+.tidy-tabs-separator-always:hover > svg:not(.tidy-tabs-inline-icon),
+.tidy-tabs-separator-always .tidy-tabs-separator-line,
+.tidy-tabs-separator-always:hover .tidy-tabs-separator-line {
   opacity: 1 !important;
   visibility: visible !important;
   width: 100% !important;
 }
 
 /* Mode: HIDDEN — line never shows */
-.tidy-tabs-separator-hidden > svg {
+.tidy-tabs-separator-hidden > svg:not(.tidy-tabs-inline-icon),
+.tidy-tabs-separator-hidden .tidy-tabs-separator-line {
+  display: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
   width: 0 !important;
@@ -335,7 +368,10 @@ tab-group.tidy-tabs-label-tinted .tab-group-label,
 zen-folder.tidy-tabs-label-tinted .tab-group-label {
   color: var(--tab-group-label-tint-color) !important;
   opacity: 1 !important;
-  transition: color 0.3s ease;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.45),
+    0 0 2px rgba(255, 255, 255, 0.35);
+  transition: color 0.3s ease, text-shadow 0.3s ease;
 }
 
 /* ================================================================

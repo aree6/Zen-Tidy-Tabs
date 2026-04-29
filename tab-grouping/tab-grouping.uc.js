@@ -56,9 +56,10 @@
     ENABLE_INLINE_BUTTONS: false,
     INLINE_BUTTON_STYLE: "both",          // "text" | "icons" | "both"
     INLINE_BUTTON_VISIBILITY: "hover",    // "always" | "hover" | "hidden"
+    INLINE_ICON_SIZE: 18,
     SHOW_SORT_BUTTON: true,
     SHOW_CLEAR_BUTTON: true,
-    SHOW_GROUP_BUTTON: false,
+    SHOW_GROUP_BUTTON: true,
     SHOW_UNGROUP_BUTTON: true,
     SEPARATOR_LINE_MODE: "hidden",        // "always" | "hover" | "hidden"
     // Subtle group/folder background and label tint from favicon colors
@@ -144,6 +145,7 @@
     ENABLE_INLINE_BUTTONS: ["bool", "ui.enable-inline-buttons"],
     INLINE_BUTTON_STYLE: ["string", "ui.inline-button-style"],
     INLINE_BUTTON_VISIBILITY: ["string", "ui.inline-button-visibility"],
+    INLINE_ICON_SIZE: ["double", "ui.inline-icon-size"],
     SHOW_SORT_BUTTON: ["bool", "ui.show-sort-button"],
     SHOW_CLEAR_BUTTON: ["bool", "ui.show-clear-button"],
     SHOW_GROUP_BUTTON: ["bool", "ui.show-group-button"],
@@ -2556,6 +2558,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     sort: "groups",
     clear: "clear",
     group: "groups",
+    folders: "folders",
     ungroup: "ungroup",
   };
 
@@ -2568,15 +2571,14 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     if (!template) return iconWrap;
 
     try {
-      const svg = template
-        .replace(/\{\{STROKE\}\}/g, "currentColor")
-        .replace(/width="16"/, 'width="14"')
-        .replace(/height="16"/, 'height="14"');
+      const svg = template.replace(/\{\{STROKE\}\}/g, "currentColor");
       const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
       const svgEl = document.importNode(parsed.documentElement, true);
       svgEl.classList.add("tidy-tabs-inline-icon");
       svgEl.setAttribute("focusable", "false");
       svgEl.setAttribute("aria-label", label);
+      svgEl.removeAttribute("width");
+      svgEl.removeAttribute("height");
       iconWrap.appendChild(svgEl);
     } catch {}
 
@@ -2744,7 +2746,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           clearUngroupedTabs();
           break;
         case "group":
-          sortTabsByTopic(false).catch?.((e) => console.error("[TidyTabs] Group failed:", e));
+          sortTabsByTopic(true).catch?.((e) => console.error("[TidyTabs] Folder grouping failed:", e));
           break;
         case "ungroup":
           ungroupAllTabs();
@@ -2762,9 +2764,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     if (CONFIG.SHOW_SORT_BUTTON) {
       defs.push({
         action: "sort",
-        label: "Tidy",
+        label: "Groups",
         icon: INLINE_ACTION_ICON_KEYS.sort,
-        tooltip: "Tidy tabs into groups",
+        tooltip: "Group tabs",
       });
     }
     if (CONFIG.SHOW_CLEAR_BUTTON) {
@@ -2778,17 +2780,17 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     if (CONFIG.SHOW_GROUP_BUTTON) {
       defs.push({
         action: "group",
-        label: "Group",
-        icon: INLINE_ACTION_ICON_KEYS.group,
-        tooltip: "Group loose tabs",
+        label: "Folders",
+        icon: INLINE_ACTION_ICON_KEYS.folders,
+        tooltip: "Folder tabs",
       });
     }
     if (CONFIG.SHOW_UNGROUP_BUTTON) {
       defs.push({
         action: "ungroup",
-        label: "Ungroup",
+        label: "Unsort",
         icon: INLINE_ACTION_ICON_KEYS.ungroup,
-        tooltip: "Ungroup grouped tabs without closing them",
+        tooltip: "Unsort tabs without closing them",
       });
     }
     return defs;
@@ -2807,6 +2809,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
     const visibility = CONFIG.INLINE_BUTTON_VISIBILITY || "hover";
     const style = CONFIG.INLINE_BUTTON_STYLE || "text";
+    const iconSize = Math.max(12, Math.min(32, Number(CONFIG.INLINE_ICON_SIZE) || 18));
     const lineMode = CONFIG.SEPARATOR_LINE_MODE || "hover";
 
     for (const sep of separators) {
@@ -2816,6 +2819,11 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       // Remove any existing button container
       const existing = sep.querySelector(".tidy-tabs-button-container");
       if (existing) existing.remove();
+      sep.style.setProperty("--tidy-tabs-inline-icon-size", `${iconSize}px`);
+
+      const linePath = sep.querySelector("#separator-path");
+      const lineSvg = linePath?.closest?.("svg");
+      if (lineSvg) lineSvg.classList.add("tidy-tabs-separator-line");
 
       // Apply visibility class
       sep.classList.remove("tidy-tabs-inline-active", "tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden");
@@ -2831,7 +2839,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       sep.classList.remove("tidy-tabs-separator-always", "tidy-tabs-separator-hover", "tidy-tabs-separator-hidden");
       if (lineMode === "always") sep.classList.add("tidy-tabs-separator-always");
       else if (lineMode === "hover") sep.classList.add("tidy-tabs-separator-hover");
-      else if (lineMode === "hidden") sep.classList.add("tidy-tabs-separator-hidden");
+      else sep.classList.add("tidy-tabs-separator-hidden");
 
       // Build button container
       const container = document.createElement("div");
@@ -2858,6 +2866,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         "tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both",
         "tidy-tabs-separator-always", "tidy-tabs-separator-hover", "tidy-tabs-separator-hidden"
       );
+      sep.querySelectorAll(".tidy-tabs-separator-line").forEach((line) => {
+        line.classList.remove("tidy-tabs-separator-line");
+      });
+      sep.style.removeProperty("--tidy-tabs-inline-icon-size");
     });
   };
 
@@ -2883,14 +2895,14 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   const SIDEBAR_MENU_ITEMS = [
     {
       id: "tidy-tabs-sort-groups",
-      label: "Tidy Tabs into Groups",
+      label: "Groups",
       iconKey: "groups",
       prefKey: "MENU_SORT_GROUPS",
       useFolders: false,
     },
     {
       id: "tidy-tabs-sort-folders",
-      label: "Tidy Tabs into Folders",
+      label: "Folders",
       iconKey: "folders",
       prefKey: "MENU_SORT_FOLDERS",
       useFolders: true,
@@ -2948,10 +2960,34 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     }
   };
 
-  const buildIconDataURI = (iconKey) => {
+  const buildIconDataURI = (iconKey, strokeColor = getMenuIconStroke()) => {
     const template = TIDY_TABS_ICON_SVGS[iconKey];
     if (!template) return "";
-    return svgToDataURI(template.replace(/\{\{STROKE\}\}/g, getMenuIconStroke()));
+    return svgToDataURI(template.replace(/\{\{STROKE\}\}/g, strokeColor));
+  };
+
+  const getElementTextColor = (element) => {
+    if (!element) return getMenuIconStroke();
+    try {
+      const color = window.getComputedStyle(element).color;
+      if (color && color !== "rgba(0, 0, 0, 0)") return color;
+    } catch {}
+    return getMenuIconStroke();
+  };
+
+  const getMenuItemTextColor = (menuItem) => {
+    if (!menuItem) return getMenuIconStroke();
+    const textEl = menuItem.querySelector?.(".menu-text, .menu-iconic-text");
+    return getElementTextColor(textEl || menuItem);
+  };
+
+  const refreshTidyTabsMenuIcons = (root = document) => {
+    root.querySelectorAll?.(`.${TIDY_TABS_MENU_ITEM_CLASS}[data-tidy-tabs-icon-key]`)
+      .forEach((mi) => {
+        const iconKey = mi.dataset.tidyTabsIconKey;
+        const uri = buildIconDataURI(iconKey, getMenuItemTextColor(mi));
+        if (uri) mi.setAttribute("image", uri);
+      });
   };
 
   function createTidyTabsMenuItem(item) {
@@ -2959,6 +2995,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     mi.id = item.id;
     mi.className = `menuitem-iconic ${TIDY_TABS_MENU_ITEM_CLASS}`;
     mi.setAttribute("label", item.label);
+    mi.dataset.tidyTabsIconKey = item.iconKey;
     const uri = buildIconDataURI(item.iconKey);
     if (uri) mi.setAttribute("image", uri);
     mi.addEventListener("command", () => sortTabsByTopic(item.useFolders));
@@ -2973,7 +3010,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   // Idempotent: skips if our items already live in the popup.
   function injectItemsInto(popup) {
     if (!popup || popup.tagName !== "menupopup") return;
-    if (popup.querySelector(`.${TIDY_TABS_MENU_ITEM_CLASS}`)) return;
+    if (popup.querySelector(`.${TIDY_TABS_MENU_ITEM_CLASS}`)) {
+      refreshTidyTabsMenuIcons(popup);
+      return;
+    }
 
     const items = getEnabledMenuItems();
     if (!items.length) return;
@@ -2982,6 +3022,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     sep.className = `${TIDY_TABS_MENU_ITEM_CLASS} tidy-tabs-menu-separator`;
     popup.appendChild(sep);
     items.forEach((item) => popup.appendChild(createTidyTabsMenuItem(item)));
+    refreshTidyTabsMenuIcons(popup);
   }
 
   // Where in the DOM does a right-click count as "the sidebar tabs area"?
@@ -3019,6 +3060,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     items.forEach((item) => popup.appendChild(createTidyTabsMenuItem(item)));
 
     (document.getElementById("mainPopupSet") || document.documentElement).appendChild(popup);
+    refreshTidyTabsMenuIcons(popup);
     fallbackPopup = popup;
     return popup;
   }
@@ -3042,7 +3084,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       if (!popup || popup.tagName !== "menupopup") return;
 
       // Don't self-inject into our own fallback popup (already populated).
-      if (popup.id === "tidy-tabs-sidebar-menu") return;
+      if (popup.id === "tidy-tabs-sidebar-menu") {
+        refreshTidyTabsMenuIcons(popup);
+        return;
+      }
 
       // Skip bookmarks/history/etc. menus where triggerNode is null.
       const trigger = popup.triggerNode;
