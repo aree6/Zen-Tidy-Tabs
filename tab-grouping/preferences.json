@@ -1,190 +1,309 @@
 [
+  {
+    "type": "text",
+    "label": "🧠 Grouping Engine",
+    "margin": "30px 0 30px 0",
+    "size": "20px"
+  },
+
     {
-      "property": "zen.tidytabs.grouping-strength",
-      "label": "Grouping strength — 0 = conservative, 1 = aggressive",
-      "type": "string",
-      "disabledOn": [],
-      "defaultValue": "0.5"
+      "type": "separator",
+      "label": "⚙️ Engine",
+      "margin": "15px 0 15px 0"
     },
+      {
+        "property": "zen.tidytabs.ai.group-namer",
+        "label": "Grouping engine",
+        "type": "dropdown",
+        "defaultValue": "hybrid",
+        "options": [
+          { "label": "Hybrid (OpenRouter → Local AI → Fuzzy)", "value": "hybrid" },
+          { "label": "OpenRouter (remote LLM only)", "value": "openrouter" },
+          { "label": "Local AI — Firefox ML (on-device)", "value": "local" },
+          { "label": "Fuzzy (deterministic only)", "value": "fuzzy" }
+        ]
+      },
+      {
+        "property": "zen.tidytabs.grouping-strength",
+        "label": "Grouping strength (0 = conservative, 1 = aggressive)",
+        "type": "string",
+        "defaultValue": "0.5",
+        "placeholder": "e.g. 0.5"
+      },
+      {
+        "property": "zen.tidytabs.group-leftovers-as-misc",
+        "label": "Group leftover tabs as Miscellaneous",
+        "type": "checkbox",
+        "defaultValue": true
+      },
+
     {
-      "property": "zen.tidytabs.group-leftovers-as-misc",
-      "label": "Group leftover tabs as Miscellaneous",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
+      "type": "separator",
+      "label": "🌐 OpenRouter (Remote LLM)",
+      "margin": "15px 0 15px 0"
     },
+      {
+        "property": "zen.tidytabs.openrouter.model",
+        "label": "OpenRouter model",
+        "type": "dropdown",
+        "defaultValue": "ling-flash",
+        "options": [
+          { "label": "Ling-2.6 Flash (fastest)", "value": "ling-flash" },
+          { "label": "GLM 4.5 Air (balanced)", "value": "glm-air" },
+          { "label": "Llama 3.3 70B (most accurate)", "value": "llama33-70b" },
+          { "label": "Gemma 3 27B (balanced)", "value": "gemma3-27b" }
+        ]
+      },
+      {
+        "property": "zen.tidytabs.openrouter.api-key",
+        "label": "OpenRouter API key",
+        "type": "string",
+        "defaultValue": "",
+        "placeholder": "sk-or-..."
+      },
+
+  {
+    "type": "separator",
+    "label": "",
+    "margin": "15px 0 15px 0"
+  },
+
+  {
+    "type": "text",
+    "label": "🛡️ Behavior",
+    "margin": "15px 0 30px 0",
+    "size": "20px"
+  },
+
     {
-      "property": "zen.tidytabs.ai.group-namer",
-      "label": "Grouping engine",
-      "type": "dropdown",
-      "disabledOn": [],
-      "defaultValue": "hybrid",
-      "options": [
-        { "label": "Hybrid (OpenRouter → Local AI → Fuzzy)", "value": "hybrid" },
-        { "label": "OpenRouter (remote LLM only)", "value": "openrouter" },
-        { "label": "Local AI — Firefox ML (on-device)", "value": "local" },
-        { "label": "Fuzzy (deterministic only)", "value": "fuzzy" }
-      ]
+      "type": "separator",
+      "label": "🔒 Protection",
+      "margin": "15px 0 15px 0"
     },
+      {
+        "property": "zen.tidytabs.behavior.protected-hosts",
+        "label": "Protected hosts (comma-separated, never auto-grouped)",
+        "type": "string",
+        "defaultValue": "",
+        "placeholder": "e.g. github.com, mail.google.com"
+      },
+      {
+        "property": "zen.tidytabs.behavior.patch-clear-button",
+        "label": "Patch clear button to protect grouped tabs",
+        "type": "checkbox",
+        "defaultValue": true
+      },
+
+  {
+    "type": "separator",
+    "label": "",
+    "margin": "15px 0 15px 0"
+  },
+
+  {
+    "type": "text",
+    "label": "🖱️ Context Menu",
+    "margin": "15px 0 30px 0",
+    "size": "20px"
+  },
+
     {
-      "property": "zen.tidytabs.openrouter.model",
-      "label": "OpenRouter model",
-      "type": "dropdown",
-      "disabledOn": [],
-      "defaultValue": "ling-flash",
-      "options": [
-        { "label": "Ling-2.6 Flash (fastest)", "value": "ling-flash" },
-        { "label": "GLM 4.5 Air (balanced)", "value": "glm-air" },
-        { "label": "Llama 3.3 70B (most accurate)", "value": "llama33-70b" },
-        { "label": "Gemma 3 27B (balanced)", "value": "gemma3-27b" }
-      ]
+      "type": "separator",
+      "label": "📋 Right-Click Menu",
+      "margin": "15px 0 15px 0"
     },
+      {
+        "property": "zen.tidytabs.ui.enable-context-menu",
+        "label": "Enable right-click context menu in sidebar",
+        "type": "checkbox",
+        "defaultValue": true
+      },
+      {
+        "property": "zen.tidytabs.menu.sort-groups",
+        "label": "Show 'Tidy Tabs into Groups' menu item",
+        "type": "checkbox",
+        "defaultValue": true
+      },
+      {
+        "property": "zen.tidytabs.menu.sort-folders",
+        "label": "Show 'Tidy Tabs into Folders' menu item",
+        "type": "checkbox",
+        "defaultValue": true
+      },
+
+  {
+    "type": "separator",
+    "label": "",
+    "margin": "15px 0 15px 0"
+  },
+
+  {
+    "type": "text",
+    "label": "✨ Inline Action Buttons",
+    "margin": "15px 0 30px 0",
+    "size": "20px"
+  },
+
     {
-      "property": "zen.tidytabs.openrouter.api-key",
-      "label": "OpenRouter API key",
-      "type": "string",
-      "disabledOn": [],
-      "defaultValue": ""
+      "type": "separator",
+      "label": "🎚️ Master Toggle",
+      "margin": "15px 0 15px 0"
     },
+      {
+        "property": "zen.tidytabs.ui.enable-inline-buttons",
+        "label": "Enable inline buttons on the pinned/normal separator",
+        "type": "checkbox",
+        "defaultValue": false
+      },
+
     {
-      "property": "zen.tidytabs.behavior.protected-hosts",
-      "label": "Protected hosts (never auto-grouped)",
-      "type": "string",
-      "disabledOn": [],
-      "defaultValue": ""
+      "type": "separator",
+      "label": "👁️ Visibility & Style",
+      "margin": "15px 0 15px 0"
     },
+      {
+        "property": "zen.tidytabs.ui.inline-button-visibility",
+        "label": "When to show buttons",
+        "type": "dropdown",
+        "defaultValue": "hover",
+        "options": [
+          { "label": "Always visible", "value": "always" },
+          { "label": "Show on hover", "value": "hover" },
+          { "label": "Hidden", "value": "hidden" }
+        ]
+      },
+      {
+        "property": "zen.tidytabs.ui.inline-button-style",
+        "label": "Button display style",
+        "type": "dropdown",
+        "defaultValue": "text",
+        "options": [
+          { "label": "Text labels", "value": "text" },
+          { "label": "Icons only", "value": "icons" },
+          { "label": "Text + Icons", "value": "both" }
+        ]
+      },
+      {
+        "property": "zen.tidytabs.ui.separator-line-mode",
+        "label": "Separator line behavior",
+        "type": "dropdown",
+        "defaultValue": "hover",
+        "options": [
+          { "label": "Always show line", "value": "always" },
+          { "label": "Hide line on hover (when buttons appear)", "value": "hover" },
+          { "label": "Always hide line", "value": "hidden" }
+        ]
+      },
+
     {
-      "property": "zen.tidytabs.behavior.patch-clear-button",
-      "label": "Patch clear button to protect grouped tabs",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
+      "type": "separator",
+      "label": "🔘 Which Buttons",
+      "margin": "15px 0 15px 0"
     },
+      {
+        "property": "zen.tidytabs.ui.show-sort-button",
+        "label": "Show Sort button (auto-group untidy tabs)",
+        "type": "checkbox",
+        "defaultValue": true
+      },
+      {
+        "property": "zen.tidytabs.ui.show-clear-button",
+        "label": "Show Clear button (close ungrouped tabs)",
+        "type": "checkbox",
+        "defaultValue": true
+      },
+      {
+        "property": "zen.tidytabs.ui.show-group-button",
+        "label": "Show Group button (alias for sort)",
+        "type": "checkbox",
+        "defaultValue": false
+      },
+      {
+        "property": "zen.tidytabs.ui.show-ungroup-button",
+        "label": "Show Ungroup button (dissolve all groups)",
+        "type": "checkbox",
+        "defaultValue": false
+      },
+
+  {
+    "type": "separator",
+    "label": "",
+    "margin": "15px 0 15px 0"
+  },
+
+  {
+    "type": "text",
+    "label": "🎨 Group Styling",
+    "margin": "15px 0 30px 0",
+    "size": "20px"
+  },
+
     {
-      "property": "zen.tidytabs.ui.enable-failure-animation",
-      "label": "Show 'Sort into Tab Groups' menu item",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
+      "type": "separator",
+      "label": "🌈 Favicon-Derived Tint",
+      "margin": "15px 0 15px 0"
     },
+      {
+        "property": "zen.tidytabs.ui.enable-group-bg-tint",
+        "label": "Tint group background with dominant favicon color",
+        "type": "checkbox",
+        "defaultValue": false
+      },
+      {
+        "property": "zen.tidytabs.ui.enable-group-label-tint",
+        "label": "Tint group label/folder name with favicon color",
+        "type": "checkbox",
+        "defaultValue": false
+      },
+      {
+        "property": "zen.tidytabs.ui.enable-folder-tint",
+        "label": "Apply tint to Zen Folders too (not just tab-groups)",
+        "type": "checkbox",
+        "defaultValue": false
+      },
+      {
+        "property": "zen.tidytabs.ui.group-bg-opacity",
+        "label": "Background tint opacity (0.0 – 1.0)",
+        "type": "string",
+        "defaultValue": "0.12",
+        "placeholder": "e.g. 0.12"
+      },
+      {
+        "property": "zen.tidytabs.ui.group-label-opacity",
+        "label": "Label tint opacity (0.0 – 1.0)",
+        "type": "string",
+        "defaultValue": "0.85",
+        "placeholder": "e.g. 0.85"
+      },
+
+  {
+    "type": "separator",
+    "label": "",
+    "margin": "15px 0 15px 0"
+  },
+
+  {
+    "type": "text",
+    "label": "🎬 Animations",
+    "margin": "15px 0 30px 0",
+    "size": "20px"
+  },
+
     {
-      "property": "zen.tidytabs.menu.sort-groups",
-      "label": "Show 'Sort into Tab Groups' menu item",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
+      "type": "separator",
+      "label": "💫 Feedback",
+      "margin": "15px 0 15px 0"
     },
-    {
-      "property": "zen.tidytabs.menu.sort-folders",
-      "label": "Show 'Sort into Folders' menu item",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.tidytabs.ui.enable-pinned-favicon-bg",
-      "label": "Tint pinned tab backgrounds from favicon color",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.tidytabs.ui.enable-group-favicon-bg",
-      "label": "Tint group/folder backgrounds from first tab's favicon (frozen once set)",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.tidytabs.ui.enable-inline-buttons",
-      "label": "Enable inline action buttons on separator",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": false
-    },
-    {
-      "property": "zen.tidytabs.ui.inline-button-style",
-      "label": "Inline button display style",
-      "type": "dropdown",
-      "disabledOn": [],
-      "defaultValue": "text",
-      "options": [
-        { "label": "Text labels", "value": "text" },
-        { "label": "Icons only", "value": "icons" },
-        { "label": "Text + Icons", "value": "both" }
-      ]
-    },
-    {
-      "property": "zen.tidytabs.ui.inline-button-visibility",
-      "label": "Button visibility mode",
-      "type": "dropdown",
-      "disabledOn": [],
-      "defaultValue": "hover",
-      "options": [
-        { "label": "Always visible", "value": "always" },
-        { "label": "Show on hover", "value": "hover" },
-        { "label": "Hidden", "value": "hidden" }
-      ]
-    },
-    {
-      "property": "zen.tidytabs.ui.show-sort-button",
-      "label": "Show Sort button on separator",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.tidytabs.ui.show-clear-button",
-      "label": "Show Clear button on separator",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    },
-    {
-      "property": "zen.tidytabs.ui.show-group-button",
-      "label": "Show Group button on separator",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": false
-    },
-    {
-      "property": "zen.tidytabs.ui.show-ungroup-button",
-      "label": "Show Ungroup button on separator",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": false
-    },
-    {
-      "property": "zen.tidytabs.ui.separator-line-mode",
-      "label": "Separator line mode",
-      "type": "dropdown",
-      "disabledOn": [],
-      "defaultValue": "hover",
-      "options": [
-        { "label": "Always show line", "value": "always" },
-        { "label": "Show on hover", "value": "hover" },
-        { "label": "Hide line completely", "value": "hidden" }
-      ]
-    },
-    {
-      "property": "zen.tidytabs.ui.enable-group-bg-tint",
-      "label": "Enable subtle group background tint from favicon color",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": false
-    },
-    {
-      "property": "zen.tidytabs.ui.group-bg-opacity",
-      "label": "Group background tint opacity (0.0 - 1.0)",
-      "type": "string",
-      "disabledOn": [],
-      "defaultValue": "0.15"
-    },
-    {
-      "property": "zen.tidytabs.ui.enable-context-menu",
-      "label": "Enable right-click context menu for tab groups",
-      "type": "checkbox",
-      "disabledOn": [],
-      "defaultValue": true
-    }
-  ]
+      {
+        "property": "zen.tidytabs.ui.enable-failure-animation",
+        "label": "Shake animation when sorting fails",
+        "type": "checkbox",
+        "defaultValue": true
+      },
+      {
+        "property": "zen.tidytabs.ui.enable-success-animation",
+        "label": "Pulse animation while sorting is in progress",
+        "type": "checkbox",
+        "defaultValue": true
+      }
+]

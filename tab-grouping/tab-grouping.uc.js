@@ -61,9 +61,12 @@
     SHOW_GROUP_BUTTON: false,
     SHOW_UNGROUP_BUTTON: false,
     SEPARATOR_LINE_MODE: "hover",         // "always" | "hover" | "hidden"
-    // Subtle group background tint extracted from favicon colors
+    // Subtle group/folder background and label tint from favicon colors
     ENABLE_GROUP_BG_TINT: false,
-    GROUP_BG_OPACITY: 0.15,
+    ENABLE_GROUP_LABEL_TINT: false,
+    ENABLE_FOLDER_TINT: false,
+    GROUP_BG_OPACITY: 0.12,
+    GROUP_LABEL_OPACITY: 0.85,
     // Context menu for tab groups
     ENABLE_CONTEXT_MENU: true,
   };
@@ -147,7 +150,10 @@
     SHOW_UNGROUP_BUTTON: ["bool", "ui.show-ungroup-button"],
     SEPARATOR_LINE_MODE: ["string", "ui.separator-line-mode"],
     ENABLE_GROUP_BG_TINT: ["bool", "ui.enable-group-bg-tint"],
+    ENABLE_GROUP_LABEL_TINT: ["bool", "ui.enable-group-label-tint"],
+    ENABLE_FOLDER_TINT: ["bool", "ui.enable-folder-tint"],
     GROUP_BG_OPACITY: ["double", "ui.group-bg-opacity"],
+    GROUP_LABEL_OPACITY: ["double", "ui.group-label-opacity"],
     ENABLE_CONTEXT_MENU: ["bool", "ui.enable-context-menu"],
   };
 
@@ -307,6 +313,8 @@
   let sidebarMenuListenersAdded = false;
   let sidebarPopupShowingHandler = null;
   let sidebarContextMenuHandler = null;
+  let prefObserver = null;
+  let prefObserverRegistered = false;
 
   let originalCloseAllUnpinnedTabs = null;
   let clearButtonPatched = false;
@@ -2963,6 +2971,82 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     );
   }
 
+  // --- Live Preference Observer ---
+  // Listens to all `zen.tidytabs.*` pref changes so config takes effect
+  // immediately without a browser restart. Debounced because the prefs UI
+  // can fire several "changed" events for a single user toggle.
+  let prefDebounceTimer = null;
+  function setupPreferenceObserver() {
+    if (prefObserverRegistered) return;
+    try {
+      prefObserver = {
+        observe(_subject, topic, _data) {
+          if (topic !== "nsPref:changed") return;
+          if (prefDebounceTimer) clearTimeout(prefDebounceTimer);
+          prefDebounceTimer = setTimeout(() => {
+            try {
+              const fresh = loadRuntimeConfig();
+              Object.keys(fresh).forEach((k) => (CONFIG[k] = fresh[k]));
+              // Re-apply UI based on new config
+              removeInlineButtons();
+              if (CONFIG.ENABLE_INLINE_BUTTONS) injectInlineButtons();
+              // Clear & re-apply tints (forces re-evaluation)
+              const tinted = document.querySelectorAll(".tidy-tabs-tinted, .tidy-tabs-label-tinted");
+              tinted.forEach((el) => {
+                el.classList.remove("tidy-tabs-tinted", "tidy-tabs-label-tinted");
+                el.style.removeProperty("--tab-group-tint-color");
+                el.style.removeProperty("--tab-group-label-tint-color");
+              });
+              applyGroupTints();
+              // Context menu toggle
+              if (!CONFIG.ENABLE_CONTEXT_MENU && sidebarMenuListenersAdded) {
+                teardownSidebarContextMenu();
+              } else if (CONFIG.ENABLE_CONTEXT_MENU && !sidebarMenuListenersAdded) {
+                ensureSidebarContextMenu();
+              }
+            } catch (e) {
+              console.warn("[TidyTabs] Pref change handler error:", e);
+            }
+          }, 100);
+        },
+      };
+      services.prefs.addObserver(PREF_BRANCH, prefObserver, false);
+      prefObserverRegistered = true;
+      console.log("[TidyTabs] Preference observer registered");
+    } catch (e) {
+      console.warn("[TidyTabs] Could not register pref observer:", e);
+    }
+  }
+
+  function teardownPreferenceObserver() {
+    if (!prefObserverRegistered || !prefObserver) return;
+    try {
+      services.prefs.removeObserver(PREF_BRANCH, prefObserver);
+    } catch {}
+    prefObserver = null;
+    prefObserverRegistered = false;
+    if (prefDebounceTimer) {
+      clearTimeout(prefDebounceTimer);
+      prefDebounceTimer = null;
+    }
+  }
+
+  // Helper to tear down the context menu listeners (used by pref observer
+  // when the user disables `enable-context-menu` at runtime).
+  function teardownSidebarContextMenu() {
+    if (sidebarPopupShowingHandler) {
+      document.removeEventListener("popupshowing", sidebarPopupShowingHandler, true);
+      sidebarPopupShowingHandler = null;
+    }
+    if (sidebarContextMenuHandler) {
+      document.removeEventListener("contextmenu", sidebarContextMenuHandler, true);
+      sidebarContextMenuHandler = null;
+    }
+    if (fallbackPopup?.isConnected) fallbackPopup.remove();
+    fallbackPopup = null;
+    sidebarMenuListenersAdded = false;
+  }
+
   // --- gZenWorkspaces Hooks ---
   function setupgZenWorkspacesHooks() {
     if (typeof window.gZenWorkspaces === "undefined" || gZenWorkspaceHooksApplied) {
@@ -3260,30 +3344,72 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     return { r: Math.round(rSum / count), g: Math.round(gSum / count), b: Math.round(bSum / count) };
   };
 
-  // Apply a subtle RGBA background tint to a group element using the
-  // extracted color and the user-configured opacity.
-  const applyGroupTint = (groupEl, color) => {
-    if (!groupEl?.isConnected || !color) return;
-    const opacity = Math.max(0, Math.min(1, CONFIG.GROUP_BG_OPACITY));
-    groupEl.style.setProperty(
-      "--tab-group-tint-color",
-      `rgba(${color.r}, ${color.g}, ${color.b}, ${opacity})`
-    );
-    groupEl.classList.add("tidy-tabs-tinted");
+  // Boost saturation of an extracted color so it reads more vivid on
+  // both light and dark themes. Favicons often have desaturated brand
+  // tints that disappear at low alpha; this nudges them toward
+  // legibility without changing hue.
+  const boostSaturation = (color, factor = 1.4) => {
+    if (!color) return color;
+    const max = Math.max(color.r, color.g, color.b);
+    const min = Math.min(color.r, color.g, color.b);
+    const avg = (color.r + color.g + color.b) / 3;
+    if (max === min) return color; // pure gray, can't saturate
+    const adjust = (c) => {
+      const delta = c - avg;
+      return Math.max(0, Math.min(255, Math.round(avg + delta * factor)));
+    };
+    return { r: adjust(color.r), g: adjust(color.g), b: adjust(color.b) };
   };
 
-  // Scan all groups in the active workspace and apply tinting.
+  // Apply tints to a single group/folder element based on user prefs.
+  // Each toggle (bg, label, folder) is independent — the user can mix
+  // and match. Background uses low alpha; label uses high alpha so the
+  // text stays readable.
+  const applyGroupTint = (groupEl, color) => {
+    if (!groupEl?.isConnected || !color) return;
+
+    const bgOpacity    = Math.max(0, Math.min(1, CONFIG.GROUP_BG_OPACITY));
+    const labelOpacity = Math.max(0, Math.min(1, CONFIG.GROUP_LABEL_OPACITY));
+
+    const bgColor    = `rgba(${color.r}, ${color.g}, ${color.b}, ${bgOpacity})`;
+    const boosted    = boostSaturation(color, 1.4);
+    const labelColor = `rgba(${boosted.r}, ${boosted.g}, ${boosted.b}, ${labelOpacity})`;
+
+    groupEl.style.setProperty("--tab-group-tint-color", bgColor);
+    groupEl.style.setProperty("--tab-group-label-tint-color", labelColor);
+
+    if (CONFIG.ENABLE_GROUP_BG_TINT) {
+      groupEl.classList.add("tidy-tabs-tinted");
+    } else {
+      groupEl.classList.remove("tidy-tabs-tinted");
+    }
+
+    if (CONFIG.ENABLE_GROUP_LABEL_TINT) {
+      groupEl.classList.add("tidy-tabs-label-tinted");
+    } else {
+      groupEl.classList.remove("tidy-tabs-label-tinted");
+    }
+  };
+
+  // Scan all groups in the active workspace and apply tints based on
+  // the current preference state. Folders are only tinted when the
+  // explicit `enable-folder-tint` toggle is on (folders have their
+  // own visual identity in Zen, so we opt-out by default).
   const applyGroupTints = () => {
-    if (!CONFIG.ENABLE_GROUP_BG_TINT) return;
+    const wantBg    = !!CONFIG.ENABLE_GROUP_BG_TINT;
+    const wantLabel = !!CONFIG.ENABLE_GROUP_LABEL_TINT;
+    if (!wantBg && !wantLabel) return;
+
     const workspaceId = window.gZenWorkspaces?.activeWorkspace;
     if (!workspaceId) return;
 
     const groups = getWorkspaceGroupElements(workspaceId);
     for (const groupEl of groups) {
-      // Skip split-view groups and zen-folders (folders have their own styling)
       if (groupEl.hasAttribute("split-view-group")) continue;
-      if (isFolderGroupElement(groupEl)) continue;
-      // Only tint groups that haven't been tinted yet or whose tabs changed
+      const isFolder = isFolderGroupElement(groupEl);
+      // Skip folders unless the user explicitly opted in
+      if (isFolder && !CONFIG.ENABLE_FOLDER_TINT) continue;
+
       const color = computeGroupColor(groupEl);
       if (color) applyGroupTint(groupEl, color);
     }
@@ -3428,6 +3554,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       }
       fallbackPopup = null;
 
+      // Stop watching preference changes
+      teardownPreferenceObserver();
+
       embeddingEnginePromise = null;
       namingEnginePromise = null;
       EMBEDDING_CACHE.clear();
@@ -3435,11 +3564,14 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       // Remove inline buttons and clean up separator classes
       removeInlineButtons();
 
-      // Remove group tint styling
-      const tintedGroups = document.querySelectorAll("tab-group.tidy-tabs-tinted");
-      tintedGroups.forEach(g => {
-        g.classList.remove("tidy-tabs-tinted");
+      // Remove group tint styling (background + label, tab-groups + folders)
+      const tintedGroups = document.querySelectorAll(
+        ".tidy-tabs-tinted, .tidy-tabs-label-tinted"
+      );
+      tintedGroups.forEach((g) => {
+        g.classList.remove("tidy-tabs-tinted", "tidy-tabs-label-tinted");
         g.style.removeProperty("--tab-group-tint-color");
+        g.style.removeProperty("--tab-group-label-tint-color");
       });
       FAVICON_COLOR_CACHE.clear();
 
@@ -3479,6 +3611,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           patchClearButtonToPreserveGroups();
           addTabEventListeners();
           processExistingTabGroups();
+          setupPreferenceObserver();
           injectInlineButtons();
           applyGroupTints();
           return true;

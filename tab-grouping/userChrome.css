@@ -130,27 +130,31 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 
 /* ================================================================
    Inline Action Buttons on Separator
+   ----------------------------------------------------------------
+   The separator is already a flex-row container in Zen. Its child
+   <svg> uses `flex-grow: 1` to fill the row. We append our button
+   container as a SIBLING of the SVG: both share the same row, so
+   the SVG line shrinks naturally when buttons appear.
+
+   No `position: absolute`, no `flex-direction: column` overrides.
+   Buttons live INLINE next to the line — that's why everything is
+   stable across Zen versions.
    ================================================================ */
 
-/* Base separator positioning context */
-.pinned-tabs-container-separator {
-  position: relative !important;
-  display: flex !important;
-  flex-direction: column;
-  overflow: visible !important;
-}
-
-/* Button container for the right-aligned buttons */
+/* Button container — flex item next to the SVG line */
 .tidy-tabs-button-container {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
+  display: inline-flex;
   flex-direction: row;
   align-items: center;
   gap: 2px;
-  z-index: 10;
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+  /* Container is a no-op until JS adds visibility classes that
+     control opacity/width below. Default = collapsed (0 width). */
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-width 0.2s ease, opacity 0.15s ease-in-out;
   pointer-events: none;
 }
 
@@ -165,144 +169,120 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   margin: 0 !important;
   font-size: 11px !important;
   line-height: 1.2 !important;
-  color: var(--sidebar-text-color, var(--toolbar-color, gray)) !important;
-  opacity: 0;
-  pointer-events: auto;
+  color: var(--sidebar-text-color, var(--toolbar-color, currentColor)) !important;
   cursor: pointer;
-  transition: opacity 0.15s ease-in-out, background-color 0.2s ease, color 0.2s ease;
-  min-width: auto !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  min-width: 0 !important;
   width: auto !important;
   height: auto !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   vertical-align: middle;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tidy-tabs-inline-btn img.btn-icon {
   width: 14px;
   height: 14px;
-  -moz-context-properties: fill, stroke;
-  fill: currentColor;
-  stroke: currentColor;
-}
-
-.tidy-tabs-inline-btn .btn-icon {
-  width: 14px;
-  height: 14px;
-  display: inline-block;
+  pointer-events: none;
 }
 
 .tidy-tabs-inline-btn .btn-label {
   display: inline;
-  margin-inline-start: 3px;
+  pointer-events: none;
 }
 
-/* --- Visibility: hover (default) --- */
-@media (-moz-bool-pref: "zen.tidytabs.ui.enable-inline-buttons") {
-  .pinned-tabs-container-separator:hover .tidy-tabs-button-container,
-  .vertical-pinned-tabs-container-separator:hover .tidy-tabs-button-container {
-    pointer-events: auto;
-  }
-  .pinned-tabs-container-separator:hover .tidy-tabs-inline-btn,
-  .vertical-pinned-tabs-container-separator:hover .tidy-tabs-inline-btn {
-    opacity: 1;
-  }
+/* When both icon + label are present, add spacing */
+.tidy-tabs-inline-btn img.btn-icon + .btn-label {
+  margin-inline-start: 4px;
 }
 
-/* --- Visibility: always --- */
-@media (-moz-bool-pref: "zen.tidytabs.ui.enable-inline-buttons") and (-moz-bool-pref: "zen.tidytabs.ui.inline-button-visibility") {
-  /* Note: "always" pref value is stored as string; CSS bool-pref only checks existence.
-     The JS toggles a class on the separator for "always" mode. */
+/* Button hover/active states */
+.tidy-tabs-inline-btn:hover {
+  background-color: var(--toolbarbutton-hover-background, rgba(128, 128, 128, 0.18)) !important;
+}
+.tidy-tabs-inline-btn:active {
+  background-color: var(--toolbarbutton-active-background, rgba(128, 128, 128, 0.28)) !important;
 }
 
-/* JS-driven always-visible mode (class toggled by script) */
+/* --- Visibility: HOVER mode (default) --------------------------- */
+/* Reveal the container only when the separator is hovered. */
+.pinned-tabs-container-separator:hover .tidy-tabs-button-container {
+  max-width: 220px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* --- Visibility: ALWAYS mode (JS adds .tidy-tabs-buttons-always) */
 .tidy-tabs-buttons-always .tidy-tabs-button-container {
+  max-width: 220px !important;
+  opacity: 1 !important;
   pointer-events: auto !important;
 }
-.tidy-tabs-buttons-always .tidy-tabs-inline-btn {
-  opacity: 1 !important;
-}
 
-/* Button hover state */
-.tidy-tabs-inline-btn:hover {
-  background-color: var(--toolbarbutton-hover-background, rgba(200, 200, 200, 0.25)) !important;
-  color: var(--toolbar-color, white) !important;
-}
-
-/* Active/pressed state */
-.tidy-tabs-inline-btn:active {
-  background-color: var(--toolbarbutton-active-background, rgba(150, 150, 150, 0.35)) !important;
-}
-
-/* Hide buttons when visibility mode is "hidden" */
-.tidy-tabs-buttons-hidden .tidy-tabs-inline-btn {
+/* --- Visibility: HIDDEN mode (JS adds .tidy-tabs-buttons-hidden) */
+.tidy-tabs-buttons-hidden .tidy-tabs-button-container {
   display: none !important;
 }
 
-/* --- Button style: icons only --- */
+/* --- Button style: ICONS only --- */
 .tidy-tabs-btn-style-icons .tidy-tabs-inline-btn .btn-label {
   display: none !important;
 }
 
-/* --- Button style: text only --- */
-.tidy-tabs-btn-style-text .tidy-tabs-inline-btn .btn-icon {
+/* --- Button style: TEXT only --- */
+.tidy-tabs-btn-style-text .tidy-tabs-inline-btn img.btn-icon {
   display: none !important;
 }
 
 /* ================================================================
    Separator Line Modes
+   ----------------------------------------------------------------
+   The line is the existing <svg> inside the separator. We control
+   its visibility via three class-based modes set by JS.
    ================================================================ */
 
-/* Default: the SVG line inside the separator */
 .pinned-tabs-container-separator svg {
-  transition: width 0.15s ease-in-out, opacity 0.2s ease;
+  transition: opacity 0.2s ease, width 0.2s ease;
 }
 
-/* Mode: hover — line shrinks when buttons appear */
-@media (-moz-bool-pref: "zen.tidytabs.ui.enable-inline-buttons") {
-  .pinned-tabs-container-separator:hover svg,
-  .vertical-pinned-tabs-container-separator:hover svg {
-    width: calc(100% - 80px) !important;
-    margin-right: auto !important;
-  }
-  
-  /* When more buttons are shown, shrink more */
-  .pinned-tabs-container-separator:has(.tidy-tabs-button-container > :nth-child(3)):hover svg,
-  .pinned-tabs-container-separator:has(.tidy-tabs-button-container > :nth-child(4)):hover svg {
-    width: calc(100% - 130px) !important;
-  }
+/* Mode: HOVER (default) — line is visible normally, but fades when
+   buttons appear so the row stays clean. */
+.pinned-tabs-container-separator:hover svg {
+  opacity: 0.4;
 }
 
-/* Mode: hidden — never show the line */
-.tidy-tabs-separator-hidden svg,
-.tidy-tabs-separator-hidden::before,
-.tidy-tabs-separator-hidden::after {
-  display: none !important;
-  opacity: 0 !important;
-  width: 0 !important;
-}
-
-/* Mode: always — line always visible (default behavior) */
-.tidy-tabs-separator-always svg {
+/* Mode: ALWAYS — line is full-strength even on hover */
+.tidy-tabs-separator-always svg,
+.tidy-tabs-separator-always:hover svg {
   opacity: 1 !important;
 }
 
-/* ================================================================
-   Group Background Tint from Favicon Color
-   ================================================================ */
-
-/* When enabled, each tab-group gets a subtle background color derived
-   from its tabs' favicon. The JS computes the color and stores it in
-   --tab-group-tint-color; we apply it here with the user's chosen opacity. */
-tab-group:not(zen-folder):not([split-view-group]) {
-  --tab-group-tint-opacity: 0.15;
-  --tab-group-tint-color: transparent;
+/* Mode: HIDDEN — line never shows */
+.tidy-tabs-separator-hidden svg {
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 
-/* Subtle background tint on the entire group.
-   Must override the existing --tab-group-color: transparent rule
-   from the base styling above. */
+/* ================================================================
+   Group Background & Label Tint from Favicon Color
+   ----------------------------------------------------------------
+   When the corresponding pref is on, JS sets two CSS variables on
+   the group/folder element:
+     --tab-group-tint-color       (RGBA, low-alpha)  — for background
+     --tab-group-label-tint-color (RGBA, high-alpha) — for label
+   Then it adds .tidy-tabs-tinted and/or .tidy-tabs-label-tinted.
+   ================================================================ */
+
+/* Default tint variables — transparent fallback */
+tab-group, zen-folder {
+  --tab-group-tint-color: transparent;
+  --tab-group-label-tint-color: currentColor;
+}
+
+/* --- Background tint on tab-groups ------------------------------ */
 tab-group:not(zen-folder):not([split-view-group]).tidy-tabs-tinted {
   --tab-group-color: var(--tab-group-tint-color) !important;
   --tab-group-color-invert: var(--tab-group-tint-color) !important;
@@ -311,16 +291,24 @@ tab-group:not(zen-folder):not([split-view-group]).tidy-tabs-tinted {
   border-radius: 6px !important;
   margin-inline: 2px !important;
   padding-block: 2px !important;
+  transition: background 0.3s ease;
 }
 
-/* Subtle tint on the label container */
-tab-group:not(zen-folder):not([split-view-group]).tidy-tabs-tinted > .tab-group-label-container {
-  background: transparent !important;
+/* --- Background tint on Zen folders (when enable-folder-tint) --- */
+zen-folder.tidy-tabs-tinted {
+  background: var(--tab-group-tint-color) !important;
+  border-radius: 6px !important;
+  margin-inline: 2px !important;
+  padding-block: 2px !important;
+  transition: background 0.3s ease;
 }
 
-/* Subtle tint on individual tabs within the group */
-tab-group:not(zen-folder):not([split-view-group]).tidy-tabs-tinted .tabbrowser-tab {
-  background: transparent !important;
+/* --- Label tint (group/folder name colored from favicon) -------- */
+tab-group.tidy-tabs-label-tinted .tab-group-label,
+zen-folder.tidy-tabs-label-tinted .tab-group-label {
+  color: var(--tab-group-label-tint-color) !important;
+  opacity: 1 !important;
+  transition: color 0.3s ease;
 }
 
 /* ================================================================
