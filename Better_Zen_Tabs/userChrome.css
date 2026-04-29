@@ -68,6 +68,7 @@
 @media (-moz-bool-pref: "zen.tabs.pending-dim") {
   .tabbrowser-tab[pending] .tab-label::before {
     content: "🌙 ";
+    filter: grayscale(1);
   }
   .tabbrowser-tab[pending] {
     filter: brightness(0.6);
