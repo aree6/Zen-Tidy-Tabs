@@ -126,8 +126,8 @@
     "free": "openrouter/free",
     "gemma-4-26b": "google/gemma-4-26b-a4b-it:free",
     "minimax-m2.5": "minimax/minimax-m2.5:free",
-    "ling-2.6-1t": "inclusionai/ling-2.6-1t:free",
     "gemma-4-31b": "google/gemma-4-31b-it:free",
+    "gpt-oss-120b": "openai/gpt-oss-120b:free",
     "nemotron-3-nano": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     "hy3-preview": "tencent/hy3-preview:free",
     "laguna-xs2": "poolside/laguna-xs.2:free",
@@ -137,8 +137,18 @@
 
   const OPENROUTER_STRUCTURED_OUTPUT_MODELS = new Set([
     "openrouter/free",
-    "inclusionai/ling-2.6-1t:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "google/gemma-4-31b-it:free",
+    "minimax/minimax-m2.5:free",
+    "openai/gpt-oss-120b:free",
   ]);
+
+  const THINKING_MODEL_HINTS = /(thinking|reasoning|gpt-oss)/i;
+
+  const getOpenRouterReasoning = (modelId) => {
+    if (!THINKING_MODEL_HINTS.test(modelId || "")) return null;
+    return { effort: "low" };
+  };
 
   const buildOpenRouterResponseFormat = () => ({
     type: "json_schema",
@@ -317,8 +327,45 @@
     );
   };
 
-  const PROTECTED_HOSTS = parseHostListPref(CONFIG.PROTECTED_HOSTS);
-  const PROTECTED_HOST_PATTERNS = [...PROTECTED_HOSTS];
+  let PROTECTED_HOST_PATTERNS = [];
+  const refreshProtectedHostPatterns = (rawHosts = CONFIG.PROTECTED_HOSTS) => {
+    PROTECTED_HOST_PATTERNS = [...parseHostListPref(rawHosts)];
+  };
+  refreshProtectedHostPatterns(CONFIG.PROTECTED_HOSTS);
+
+  let activeSortRunId = 0;
+  let activeSortAbortController = null;
+  let activeSortCleanupTimer = null;
+
+  const cancelActiveSortRun = () => {
+    if (activeSortCleanupTimer) {
+      clearTimeout(activeSortCleanupTimer);
+      activeSortCleanupTimer = null;
+    }
+    if (activeSortAbortController) {
+      try {
+        activeSortAbortController.abort();
+      } catch {}
+      activeSortAbortController = null;
+    }
+  };
+
+  const beginSortRun = () => {
+    cancelActiveSortRun();
+    activeSortRunId += 1;
+    activeSortAbortController = new AbortController();
+    return { runId: activeSortRunId, signal: activeSortAbortController.signal };
+  };
+
+  const isCurrentSortRun = (runId) => runId === activeSortRunId;
+
+  const refreshRuntimeConfig = () => {
+    const freshConfig = loadRuntimeConfig();
+    deriveGroupingThresholds(freshConfig);
+    Object.keys(freshConfig).forEach((k) => (CONFIG[k] = freshConfig[k]));
+    refreshProtectedHostPatterns(CONFIG.PROTECTED_HOSTS);
+    return CONFIG;
+  };
   const isProtectedHost = (host) => {
     const normalizedHost = normalizeHost(host);
     if (!normalizedHost || PROTECTED_HOST_PATTERNS.length === 0) return false;
@@ -529,6 +576,11 @@
       .join(" → ");
   };
 
+  const sanitizeGroupNameForSorting = (name, fallbackTitles = []) => {
+    const compact = compactGroupName(name);
+    return sanitizeGroupName(compact, fallbackTitles);
+  };
+
   // True iff the user has both picked a non-"local" OpenRouter model AND
   // supplied an API key. Cheap guard so call sites can short-circuit before
   // building prompts or engine state.
@@ -556,6 +608,11 @@
     const slug = (CONFIG.OPENROUTER_MODEL || "").trim();
     if (!slug || !OPENROUTER_MODELS[slug]) return false;
     return !!(CONFIG.OPENROUTER_API_KEY || "").trim();
+  };
+
+  const getOpenRouterModelId = () => {
+    const slug = (CONFIG.OPENROUTER_MODEL || "").trim();
+    return OPENROUTER_MODELS[slug] || OPENROUTER_MODELS.free;
   };
 
   // Defensively extract a JSON object from a possibly-decorated model
@@ -595,14 +652,19 @@
   //
   // Privacy: we send title + hostname only. Full URLs (path + query) are
   // deliberately excluded to avoid leaking viewing history.
-  const askOpenRouterForGroups = async (tabs, existingGroupNames, useFolders = false) => {
+  const askOpenRouterForGroups = async (
+    tabs,
+    existingGroupNames,
+    useFolders = false,
+    requestModelId = null
+  ) => {
     if (!isOpenRouterConfigured()) return null;
 
     const validTabs = (tabs || []).filter((t) => t?.isConnected);
     if (validTabs.length < 2) return null; // nothing meaningful to cluster
 
     const modelSlug = (CONFIG.OPENROUTER_MODEL || "").trim();
-    const modelId = OPENROUTER_MODELS[modelSlug];
+    const modelId = requestModelId || getOpenRouterModelId() || OPENROUTER_MODELS[modelSlug];
     const apiKey = (CONFIG.OPENROUTER_API_KEY || "").trim();
 
     if (!OPENROUTER_STRUCTURED_OUTPUT_MODELS.has(modelId)) {
@@ -648,6 +710,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 - Each key is a group name. Each value is an array of 1-based tab numbers.
 - Each group MUST contain at least 2 tab numbers.
 - Tabs that don't fit any group should be OMITTED entirely (do not include them).
+- Keep group names short: 2-4 words max.
+- Prefer noun phrases, not sentences.
+- Avoid vendor names, generic labels, and punctuation.
 - Return ONLY raw JSON. No markdown code fences, no prose, no explanations.`;
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
@@ -656,12 +721,14 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     const timer = setTimeout(() => controller.abort(), 20000);
 
     try {
+      const reasoning = getOpenRouterReasoning(modelId);
       const body = {
         model: modelId,
         // Output is bounded roughly by (groups * ~30 chars) + tab numbers;
         // 1024 is comfortable headroom for ~100 tabs across ~20 groups.
         max_tokens: 1024,
         temperature: 0.3,
+        ...(reasoning ? { reasoning } : {}),
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -691,10 +758,23 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         console.warn(
           `[TabSort][OpenRouter] HTTP ${response.status} from ${modelId}; body will be discarded.`
         );
+        if (modelId !== "openrouter/free" && modelId !== "openrouter/auto") {
+          const fallbackModelId = "openrouter/free";
+          if (fallbackModelId !== modelId) {
+            console.warn(`[TabSort][OpenRouter] Retrying with ${fallbackModelId}.`);
+            return await askOpenRouterForGroups(
+              tabs,
+              existingGroupNames,
+              useFolders,
+              fallbackModelId
+            );
+          }
+        }
         return null;
       }
 
       const json = await response.json();
+      const responseModel = json?.model || modelId;
       const content = json?.choices?.[0]?.message?.content;
       console.log(`[TabSort][OpenRouter] Raw response length: ${(content || "").length} chars`);
       const parsed = parseGroupingJson(content);
@@ -732,14 +812,14 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         // group, prefer the existing casing so we merge cleanly.
         const finalName = [...(existingGroupNames || [])].find(
           (existing) => existing.toLowerCase() === cleanName.toLowerCase()
-        ) || cleanName;
+        ) || sanitizeGroupNameForSorting(cleanName, validTabs.map(getTabTitle));
 
         result[finalName] = (result[finalName] || []).concat(tabsForGroup);
       }
 
       const groupCount = Object.keys(result).length;
       console.log(
-        `[TabSort][OpenRouter] ${modelId} grouped ${assignedTabs.size}/${validTabs.length} tabs into ${groupCount} groups.`
+        `[TabSort][OpenRouter] ${responseModel} grouped ${assignedTabs.size}/${validTabs.length} tabs into ${groupCount} groups.`
       );
       return groupCount > 0 ? result : null;
     } catch (e) {
@@ -1325,7 +1405,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           options: { max_new_tokens: 8, temperature: 0.7 },
         });
 
-        return sanitizeGroupName(aiResult?.[0]?.generated_text || "Group", titles);
+        return sanitizeGroupNameForSorting(aiResult?.[0]?.generated_text || "Group", titles);
       } catch (e) {
         console.error("[TabSort][AI] Error naming group:", e);
         return "Group";
@@ -1864,6 +1944,18 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       .join(" ");
   };
 
+  const compactGroupName = (name) => {
+    const raw = (name || "").toString().trim();
+    if (!raw) return "Group";
+    const words = raw
+      .replace(/[()\[\]{}|\/\\,_:;.!?]+/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((word) => !/^(the|and|or|for|with|from|into|over|under|about|via|best|fastest|smartest|balanced|lightweight|agent|preview|free)$/i.test(word));
+    const compact = words.slice(0, 4).join(" ").trim();
+    return sanitizeGroupName(compact || raw.slice(0, 24));
+  };
+
   // Pick a label that's (a) shared by a meaningful fraction of the cluster,
   // and (b) distinctive in the batch (high IDF). Prefers bigrams slightly
   // over unigrams when both score similarly — they tend to read better.
@@ -2122,9 +2214,11 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     if (isSorting) return;
     isSorting = true;
     setSortingVisualState(true);
+    const { runId } = beginSortRun();
 
     let separatorsToSort = [];
     try {
+      if (!isCurrentSortRun(runId)) return;
       separatorsToSort = domCache.getSeparators();
       // Apply visual indicator
       if (separatorsToSort.length > 0) {
@@ -2173,10 +2267,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         return;
       }
 
+      if (!isCurrentSortRun(runId)) return;
+
       // Reload preferences live — no browser restart needed after config changes.
-      const freshConfig = loadRuntimeConfig();
-      deriveGroupingThresholds(freshConfig);
-      Object.keys(freshConfig).forEach((k) => (CONFIG[k] = freshConfig[k]));
+      refreshRuntimeConfig();
 
       // --- Engine selection ---
       // The dropdown controls the grouping backend. Each non-hybrid option
@@ -2210,6 +2304,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           allExistingGroupNames,
           useFolders
         );
+        if (!isCurrentSortRun(runId)) return;
         if (hasGroups(remoteGroups)) {
           finalGroups = consolidateSimilarGroupNames(
             remoteGroups,
@@ -2229,6 +2324,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         if (isAIEnabled()) {
           console.log(`[TabSort] Trying Local AI for ${initialTabsToSort.length} tabs`);
           aiTabTopics = await askAIForMultipleTopics(initialTabsToSort);
+          if (!isCurrentSortRun(runId)) return;
           if (aiTabTopics.length > 0) {
             aiTabTopics.forEach(({ tab, topic }) => {
               if (!topic || topic === "Uncategorized" || !tab || !tab.isConnected) return;
@@ -2239,8 +2335,8 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
             Object.keys(finalGroups).forEach((topic) => {
               if (finalGroups[topic].length < 2) delete finalGroups[topic];
             });
-            finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
-            engineProducedGroups = hasGroups(finalGroups);
+      finalGroups = consolidateSimilarGroupNames(finalGroups, allExistingGroupNames);
+      engineProducedGroups = hasGroups(finalGroups);
             console.log(`[TabSort] Local AI returned ${aiTabTopics.length} topics, produced ${Object.keys(finalGroups).length} group(s)`);
           } else {
             console.warn(`[TabSort] Local AI returned no topics`);
@@ -2262,6 +2358,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       }
 
       // --- Rescue ungrouped tabs ---
+      if (!isCurrentSortRun(runId)) return;
       if (usedFuzzy) {
         console.log(
           `[TabSort] Running post-grouping rescue passes on ${Object.keys(finalGroups).length} initial group(s).`
@@ -2546,6 +2643,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
       // --- Reorder tabs: groups first, then ungrouped tabs ---
       try {
+        if (!isCurrentSortRun(runId)) return;
         const workspaceElement = gZenWorkspaces?.activeWorkspaceElement;
         reorderWorkspaceTabs(
           workspaceElement,
@@ -2562,30 +2660,19 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     } catch (error) {
       console.error("Error during overall sorting process:", error);
     } finally {
-      // If failure animation is playing, delay the cleanup
-      if (isPlayingFailureAnimation) {
-        setTimeout(() => {
-          isSorting = false;
-          setSortingVisualState(false);
-          cleanupAnimation();
-          if (separatorsToSort.length > 0) {
-            separatorsToSort.forEach((sep) => {
-              if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
-            });
-          }
-        }, CONFIG.FAILURE_PULSE_DURATION * CONFIG.FAILURE_PULSE_COUNT + 300);
-      } else {
-        setTimeout(() => {
-          isSorting = false;
-          setSortingVisualState(false);
-          cleanupAnimation();
-          if (separatorsToSort.length > 0) {
-            separatorsToSort.forEach((sep) => {
-              if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
-            });
-          }
-        }, 800);
-      }
+      activeSortCleanupTimer = setTimeout(() => {
+        if (!isCurrentSortRun(runId)) return;
+        isSorting = false;
+        setSortingVisualState(false);
+        cleanupAnimation();
+        if (separatorsToSort.length > 0) {
+          separatorsToSort.forEach((sep) => {
+            if (sep?.isConnected) sep.classList.remove("separator-is-sorting");
+          });
+        }
+        activeSortAbortController = null;
+        activeSortCleanupTimer = null;
+      }, isPlayingFailureAnimation ? CONFIG.FAILURE_PULSE_DURATION * CONFIG.FAILURE_PULSE_COUNT + 300 : 800);
     }
   };
 
@@ -3212,8 +3299,8 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           if (prefDebounceTimer) clearTimeout(prefDebounceTimer);
           prefDebounceTimer = setTimeout(() => {
             try {
-              const fresh = loadRuntimeConfig();
-              Object.keys(fresh).forEach((k) => (CONFIG[k] = fresh[k]));
+              cancelActiveSortRun();
+              refreshRuntimeConfig();
               // Re-apply UI based on new config
               removeInlineButtons();
               if (CONFIG.ENABLE_INLINE_BUTTONS) injectInlineButtons();
@@ -3232,6 +3319,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
               if (CONFIG.ENABLE_CONTEXT_MENU) {
                 ensureSidebarContextMenu();
               }
+              domCache.invalidate();
+              processExistingTabGroups();
+              applyGroupTints();
+              if (CONFIG.ENABLE_INLINE_BUTTONS) injectInlineButtons();
             } catch (e) {
               console.warn("[TidyTabs] Pref change handler error:", e);
             }

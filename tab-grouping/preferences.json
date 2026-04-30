@@ -44,7 +44,7 @@
     },
       {
         "type": "text",
-        "label": "Auto-routing and Ling 2.6 1T are JSON-safe; other models are best-effort.",
+        "label": "Auto-routing, Gemma 4, and MiniMax are JSON-safe; others are best-effort.",
         "margin": "8px 0 12px 0",
         "size": "13px"
       },
@@ -57,13 +57,8 @@
           { "label": "Auto-routing (recommended)", "value": "free" },
           { "label": "Gemma 4 26B A4B — balanced smart + fast", "value": "gemma-4-26b" },
           { "label": "MiniMax M2.5 — strong smart + fast", "value": "minimax-m2.5" },
-          { "label": "Ling 2.6 1T — fastest", "value": "ling-2.6-1t" },
           { "label": "Gemma 4 31B — smartest", "value": "gemma-4-31b" },
-          { "label": "Nemotron 3 Nano — smart + fast", "value": "nemotron-3-nano" },
-          { "label": "Hy3 Preview — smart, slightly slower", "value": "hy3-preview" },
-          { "label": "Laguna XS.2 — balanced agent", "value": "laguna-xs2" },
-          { "label": "Laguna M.1 — fast lightweight", "value": "laguna-m1" },
-          { "label": "LFM 2.5 Thinking — very fast, less smart", "value": "lfm-2.5-1.2b-thinking" }
+          { "label": "GPT OSS 120B — strong general", "value": "gpt-oss-120b" }
         ]
       },
       {
