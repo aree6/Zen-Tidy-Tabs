@@ -602,12 +602,13 @@
 
     const systemPrompt = `You are a precise tab-topic classifier inside a web browser.
 
-Your job: look at each tab's title and figure out what the user is actually DOING  — then group tabs that share the same specific subject, project, or task.
+Your job: look at each tab's title and figure out what the user is actually DOING — then group tabs that share the same specific subject, project, or task.
 
 How to decide grouping:
 - Ask: "What concrete subject do these tabs have in common?"
 - Group by the specific topic the user is working on (e.g. a project name, a technology, a purchase, a research question), NOT by website, domain, or broad category.
-- If tabs are about completely different things, do NOT force them into one group. Keep them separate or leave them ungrouped.
+- ALWAYS try to group tabs together. Only leave a tab alone if it is truly unrelated to every other tab.
+- Each group MUST have at least 2 tabs. Never create a group with just 1 tab.
 
 Naming rules (CRITICAL):
 - Use the EXACT specific subject the tabs share. Be creative but precise.
@@ -616,6 +617,8 @@ Naming rules (CRITICAL):
 
 Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 - Each key is a group name. Each value is an array of 1-based tab numbers.
+- Each group MUST contain at least 2 tab numbers.
+- Tabs that don't fit any group should be OMITTED entirely (do not include them).
 - Return ONLY raw JSON. No markdown code fences, no prose, no explanations.`;
 
     const userPrompt = `${lines.join("\n")}${existingHint}\n\nJSON:`;
@@ -2218,7 +2221,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       }
 
       // ----- Fuzzy (hybrid fallback, or direct) -----
-      if (!engineProducedGroups && (engine === "hybrid" || engine === "fuzzy")) {
+      if (!engineProducedGroups && (engine === "hybrid" || engine === "fuzzy" || engine === "openrouter" || engine === "local-ai")) {
         console.log(`[TabSort] Trying Fuzzy grouping for ${initialTabsToSort.length} tabs`);
         finalGroups = fuzzyGroupByTokens(initialTabsToSort, allExistingGroupNames);
         usedFuzzy = true;
