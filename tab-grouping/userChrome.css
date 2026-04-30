@@ -9,7 +9,8 @@
 }
 
 .pinned-tabs-container-separator svg:not(.tidy-tabs-inline-icon),
-.pinned-tabs-container-separator .tidy-tabs-separator-line {
+.pinned-tabs-container-separator .tidy-tabs-separator-line,
+.pinned-tabs-container-separator toolbarseparator {
   width: 100% !important;
   height: 1px;
   min-height: 1px !important;
@@ -19,11 +20,14 @@
   margin: var(--tidy-tabs-line-margin, 4px) auto !important;
   flex-grow: 1;
   opacity: 0.35;
-  transition: opacity 0.15s ease-in-out, width 0.15s ease-in-out;
+  transition: opacity 0.15s ease-in-out;
+  background: var(--sidebar-text-color, var(--toolbar-color, currentColor)) !important;
+  border: none !important;
 }
 
 .pinned-tabs-container-separator:hover svg:not(.tidy-tabs-inline-icon),
-.pinned-tabs-container-separator:hover .tidy-tabs-separator-line {
+.pinned-tabs-container-separator:hover .tidy-tabs-separator-line,
+.pinned-tabs-container-separator:hover toolbarseparator {
   opacity: 1;
 }
 
@@ -240,7 +244,7 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 
 /* When both icon + label are present, add spacing */
 .tidy-tabs-inline-btn .btn-icon + .btn-label {
-  margin-inline-start: 4px;
+  margin-inline-start: 2px;
 }
 
 /* Button hover/active states */
@@ -295,12 +299,14 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 
 /* Mode: HOVER (default) — line is faint until hover. */
 .tidy-tabs-separator-hover > svg:not(.tidy-tabs-inline-icon),
-.tidy-tabs-separator-hover .tidy-tabs-separator-line {
+.tidy-tabs-separator-hover .tidy-tabs-separator-line,
+.tidy-tabs-separator-hover toolbarseparator {
   opacity: 0.35;
 }
 
 .tidy-tabs-separator-hover:hover > svg:not(.tidy-tabs-inline-icon),
-.tidy-tabs-separator-hover:hover .tidy-tabs-separator-line {
+.tidy-tabs-separator-hover:hover .tidy-tabs-separator-line,
+.tidy-tabs-separator-hover:hover toolbarseparator {
   opacity: 1;
 }
 
@@ -308,7 +314,8 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 .tidy-tabs-separator-always > svg:not(.tidy-tabs-inline-icon),
 .tidy-tabs-separator-always:hover > svg:not(.tidy-tabs-inline-icon),
 .tidy-tabs-separator-always .tidy-tabs-separator-line,
-.tidy-tabs-separator-always:hover .tidy-tabs-separator-line {
+.tidy-tabs-separator-always:hover .tidy-tabs-separator-line,
+.tidy-tabs-separator-always toolbarseparator {
   opacity: 1 !important;
   visibility: visible !important;
   width: 100% !important;
@@ -316,14 +323,30 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 
 /* Mode: HIDDEN — line never shows */
 .tidy-tabs-separator-hidden > svg:not(.tidy-tabs-inline-icon),
-.tidy-tabs-separator-hidden .tidy-tabs-separator-line {
+.tidy-tabs-separator-hidden .tidy-tabs-separator-line,
+.tidy-tabs-separator-hidden > toolbarseparator,
+.tidy-tabs-separator-hidden toolbarseparator {
   display: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
   width: 0 !important;
   min-width: 0 !important;
-  margin-inline: 0 !important;
+  margin: 0 !important;
   flex-grow: 0 !important;
+  height: 0 !important;
+}
+
+/* Hide ALL separator elements when mode is hidden */
+.pinned-tabs-container-separator.tidy-tabs-separator-hidden,
+.pinned-tabs-container-separator.tidy-tabs-separator-hidden * {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Also hide any vertical-pinned-tabs-container-separator */
+.tidy-tabs-separator-hidden ~ #vertical-pinned-tabs-container-separator,
+.tidy-tabs-separator-hidden ~ vertical-pinned-tabs-container-separator {
+  display: none !important;
 }
 
 /* ================================================================
