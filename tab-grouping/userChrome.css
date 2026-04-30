@@ -195,9 +195,10 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: 1px;
-  flex-shrink: 0;
-  margin-inline-end: 4px;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 1;
+  margin: 0 auto;
   /* Container is a no-op until JS adds visibility classes that
      control opacity/width below. Default = collapsed (0 width). */
   max-width: 0;
@@ -237,10 +238,11 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0 !important;
+  gap: 2px !important;
   vertical-align: middle;
   white-space: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  flex-grow: 0;
   overflow: visible;
 }
 
@@ -269,6 +271,8 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   font-size: inherit;
   white-space: nowrap;
   overflow: visible;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* When both icon + label are present, add minimal spacing */
@@ -287,7 +291,7 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 /* --- Visibility: HOVER mode (default) --------------------------- */
 /* Reveal the container only when the separator is hovered. */
 .pinned-tabs-container-separator:hover .tidy-tabs-button-container {
-  max-width: 260px;
+  max-width: 400px;
   opacity: 1;
   pointer-events: auto;
 }
