@@ -169,19 +169,17 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 
 /* Button container — flex item next to the SVG line */
 .tidy-tabs-button-container {
-  display: inline-flex;
+  display: inline-flex !important;
   flex-direction: row;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
   margin-inline-end: 4px;
-  /* Container is a no-op until JS adds visibility classes that
-     control opacity/width below. Default = collapsed (0 width). */
-  max-width: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: max-width 0.2s ease, opacity 0.15s ease-in-out;
-  pointer-events: none;
+  max-width: 260px;
+  overflow: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
 }
 
 /* Hide Zen/native separator controls while our inline controls own this row.
@@ -299,56 +297,59 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   transition: opacity 0.2s ease, width 0.2s ease;
 }
 
-/* Mode: HOVER (default) — line is faint until hover. */
-.tidy-tabs-separator-hover > svg:not(.tidy-tabs-inline-icon),
-.tidy-tabs-separator-hover .tidy-tabs-separator-line,
-.tidy-tabs-separator-hover toolbarseparator {
-  opacity: 0.35;
+/* ================================================================
+   Separator Line Styling (distinct from buttons)
+   The line and buttons are separate concerns. These rules only
+   affect the line element, not the button container.
+   ================================================================ */
+
+/* Default line appearance */
+.pinned-tabs-container-separator svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator .tidy-tabs-separator-line,
+.pinned-tabs-container-separator > toolbarseparator {
+  width: 100% !important;
+  height: var(--tidy-tabs-line-thickness, 1px);
+  min-height: var(--tidy-tabs-line-thickness, 1px);
+  display: block;
+  overflow: visible;
+  min-width: 0;
+  margin: var(--tidy-tabs-line-margin, 4px) auto !important;
+  flex-grow: 1;
+  opacity: var(--tidy-tabs-line-opacity, 0.35);
+  transition: opacity 0.15s ease-in-out;
+  background: var(--tidy-tabs-line-color, var(--sidebar-text-color, currentColor)) !important;
+  border: none !important;
 }
 
-.tidy-tabs-separator-hover:hover > svg:not(.tidy-tabs-inline-icon),
-.tidy-tabs-separator-hover:hover .tidy-tabs-separator-line,
-.tidy-tabs-separator-hover:hover toolbarseparator {
+/* Line fades to full on hover */
+.pinned-tabs-container-separator:hover svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator:hover .tidy-tabs-separator-line,
+.pinned-tabs-container-separator:hover > toolbarseparator {
   opacity: 1;
 }
 
-/* Mode: ALWAYS — line is full-strength even on hover */
-.tidy-tabs-separator-always > svg:not(.tidy-tabs-inline-icon),
-.tidy-tabs-separator-always:hover > svg:not(.tidy-tabs-inline-icon),
-.tidy-tabs-separator-always .tidy-tabs-separator-line,
-.tidy-tabs-separator-always:hover .tidy-tabs-separator-line,
-.tidy-tabs-separator-always toolbarseparator {
-  opacity: 1 !important;
-  visibility: visible !important;
-  width: 100% !important;
-}
-
-/* Mode: HIDDEN — line never shows */
-.tidy-tabs-separator-hidden > svg:not(.tidy-tabs-inline-icon),
-.tidy-tabs-separator-hidden .tidy-tabs-separator-line,
-.tidy-tabs-separator-hidden > toolbarseparator,
-.tidy-tabs-separator-hidden toolbarseparator {
+/* Line mode OFF: hide line element only, but keep buttons */
+.pinned-tabs-container-separator.tidy-tabs-line-off svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator.tidy-tabs-line-off .tidy-tabs-separator-line,
+.pinned-tabs-container-separator.tidy-tabs-line-off > toolbarseparator {
   display: none !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-  width: 0 !important;
-  min-width: 0 !important;
-  margin: 0 !important;
-  flex-grow: 0 !important;
   height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  opacity: 0 !important;
 }
 
-/* Hide ALL separator elements when mode is hidden */
-.pinned-tabs-container-separator.tidy-tabs-separator-hidden,
-.pinned-tabs-container-separator.tidy-tabs-separator-hidden * {
-  display: none !important;
-  visibility: hidden !important;
+/* Line mode FADE: default faint, full on hover */
+.pinned-tabs-container-separator.tidy-tabs-line-fade > svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator.tidy-tabs-line-fade .tidy-tabs-separator-line,
+.pinned-tabs-container-separator.tidy-tabs-line-fade > toolbarseparator {
+  opacity: var(--tidy-tabs-line-opacity, 0.35);
 }
 
-/* Also hide any vertical-pinned-tabs-container-separator */
-.tidy-tabs-separator-hidden ~ #vertical-pinned-tabs-container-separator,
-.tidy-tabs-separator-hidden ~ vertical-pinned-tabs-container-separator {
-  display: none !important;
+.pinned-tabs-container-separator.tidy-tabs-line-fade:hover > svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator.tidy-tabs-line-fade:hover .tidy-tabs-separator-line,
+.pinned-tabs-container-separator.tidy-tabs-line-fade:hover > toolbarseparator {
+  opacity: 1;
 }
 
 /* ================================================================

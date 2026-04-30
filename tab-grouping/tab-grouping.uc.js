@@ -2851,11 +2851,10 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       sep.classList.remove("tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both");
       sep.classList.add(`tidy-tabs-btn-style-${style}`);
 
-      // Apply separator line mode class
-      sep.classList.remove("tidy-tabs-separator-always", "tidy-tabs-separator-hover", "tidy-tabs-separator-hidden");
-      if (lineMode === "always") sep.classList.add("tidy-tabs-separator-always");
-      else if (lineMode === "hover") sep.classList.add("tidy-tabs-separator-hover");
-      else sep.classList.add("tidy-tabs-separator-hidden");
+      // Apply separator line mode class - clean naming
+      sep.classList.remove("tidy-tabs-line-off", "tidy-tabs-line-fade");
+      if (lineMode === "hidden") sep.classList.add("tidy-tabs-line-off");
+      else sep.classList.add("tidy-tabs-line-fade");
 
       // Build button container
       const container = document.createElement("div");
@@ -2880,7 +2879,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       sep.classList.remove(
         "tidy-tabs-inline-active", "tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden",
         "tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both",
-        "tidy-tabs-separator-always", "tidy-tabs-separator-hover", "tidy-tabs-separator-hidden"
+        "tidy-tabs-line-off", "tidy-tabs-line-fade"
       );
       sep.querySelectorAll(".tidy-tabs-separator-line").forEach((line) => {
         line.classList.remove("tidy-tabs-separator-line");
