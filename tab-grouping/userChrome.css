@@ -200,14 +200,14 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   background: transparent !important;
   border: none !important;
   border-radius: 4px !important;
-  padding: 2px 6px !important;
+  padding: 2px 4px !important;
   margin: 0 !important;
   font-size: 11px !important;
   line-height: 1.2 !important;
   color: var(--sidebar-text-color, var(--toolbar-color, currentColor)) !important;
   cursor: pointer;
   opacity: 0.58;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  transition: opacity 0.15s ease;
   min-width: 0 !important;
   width: auto !important;
   height: auto !important;
@@ -220,18 +220,19 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 }
 
 .tidy-tabs-inline-btn .btn-icon {
-  width: var(--tidy-tabs-inline-icon-size, 18px);
-  height: var(--tidy-tabs-inline-icon-size, 18px);
+  width: var(--tidy-tabs-inline-icon-size, 16px);
+  height: var(--tidy-tabs-inline-icon-size, 16px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  flex-shrink: 0;
 }
 
 .tidy-tabs-inline-btn .tidy-tabs-inline-icon,
 .tidy-tabs-inline-btn .btn-icon > svg {
-  width: var(--tidy-tabs-inline-icon-size, 18px);
-  height: var(--tidy-tabs-inline-icon-size, 18px);
+  width: var(--tidy-tabs-inline-icon-size, 16px);
+  height: var(--tidy-tabs-inline-icon-size, 16px);
   color: currentColor;
   stroke: currentColor;
   pointer-events: none;
@@ -240,11 +241,12 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 .tidy-tabs-inline-btn .btn-label {
   display: inline;
   pointer-events: none;
+  font-size: inherit;
 }
 
-/* When both icon + label are present, add spacing */
+/* When both icon + label are present, add minimal spacing */
 .tidy-tabs-inline-btn .btn-icon + .btn-label {
-  margin-inline-start: 2px;
+  margin-inline-start: 1px;
 }
 
 /* Button hover/active states */

@@ -185,18 +185,17 @@
       },
       {
         "property": "zen.tidytabs.ui.separator-line-mode",
-        "label": "Native separator line (fades in on hover)",
+        "label": "Separator line",
         "type": "dropdown",
         "defaultValue": "hidden",
         "options": [
-          { "label": "None (buttons/labels only)", "value": "hidden" },
-          { "label": "Show line, fade on hover", "value": "hover" },
-          { "label": "Always show line", "value": "always" }
+          { "label": "Off (just buttons)", "value": "hidden" },
+          { "label": "Show, fade on hover", "value": "hover" }
         ]
       },
       {
         "property": "zen.tidytabs.ui.separator-line-margin",
-        "label": "Separator line margin (0–20 px)",
+        "label": "Line vertical margin (0–20 px)",
         "type": "string",
         "defaultValue": "4",
         "placeholder": "e.g. 4"
