@@ -63,6 +63,9 @@
     SHOW_UNGROUP_BUTTON: true,
     SEPARATOR_LINE_MODE: "hidden",        // "always" | "hover" | "hidden"
     SEPARATOR_LINE_MARGIN: 4,            // margin top/bottom in pixels
+    SEPARATOR_LINE_THICKNESS: 1,        // line thickness in px
+    SEPARATOR_LINE_COLOR: "auto",       // "auto" or hex color
+    SEPARATOR_LINE_OPACITY: 0.35,      // line opacity
     // Subtle group/folder background and label tint from favicon colors
     ENABLE_GROUP_BG_TINT: false,
     ENABLE_GROUP_LABEL_TINT: false,
@@ -153,6 +156,9 @@
     SHOW_UNGROUP_BUTTON: ["bool", "ui.show-ungroup-button"],
     SEPARATOR_LINE_MODE: ["string", "ui.separator-line-mode"],
     SEPARATOR_LINE_MARGIN: ["double", "ui.separator-line-margin"],
+    SEPARATOR_LINE_THICKNESS: ["double", "ui.separator-line-thickness"],
+    SEPARATOR_LINE_COLOR: ["string", "ui.separator-line-color"],
+    SEPARATOR_LINE_OPACITY: ["double", "ui.separator-line-opacity"],
     ENABLE_GROUP_BG_TINT: ["bool", "ui.enable-group-bg-tint"],
     ENABLE_GROUP_LABEL_TINT: ["bool", "ui.enable-group-label-tint"],
     ENABLE_FOLDER_TINT: ["bool", "ui.enable-folder-tint"],
@@ -2814,6 +2820,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     const iconSize = Math.max(12, Math.min(32, Number(CONFIG.INLINE_ICON_SIZE) || 18));
     const lineMode = CONFIG.SEPARATOR_LINE_MODE || "hover";
     const lineMargin = Math.max(0, Math.min(20, Number(CONFIG.SEPARATOR_LINE_MARGIN) || 4));
+    const lineThickness = Math.max(1, Math.min(8, Number(CONFIG.SEPARATOR_LINE_THICKNESS) || 1));
+    const lineOpacity = Math.max(0.1, Math.min(1, Number(CONFIG.SEPARATOR_LINE_OPACITY) || 0.35));
+    const lineColor = (CONFIG.SEPARATOR_LINE_COLOR || "auto").trim();
 
     for (const sep of separators) {
       if (!sep?.isConnected) continue;
@@ -2824,6 +2833,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       if (existing) existing.remove();
       sep.style.setProperty("--tidy-tabs-inline-icon-size", `${iconSize}px`);
       sep.style.setProperty("--tidy-tabs-line-margin", `${lineMargin}px`);
+      sep.style.setProperty("--tidy-tabs-line-thickness", `${lineThickness}px`);
+      sep.style.setProperty("--tidy-tabs-line-opacity", lineOpacity);
+      sep.style.setProperty("--tidy-tabs-line-color", lineColor === "auto" ? "currentColor" : lineColor);
 
       const linePath = sep.querySelector("#separator-path");
       const lineSvg = linePath?.closest?.("svg");
@@ -2875,6 +2887,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       });
       sep.style.removeProperty("--tidy-tabs-inline-icon-size");
       sep.style.removeProperty("--tidy-tabs-line-margin");
+      sep.style.removeProperty("--tidy-tabs-line-thickness");
+      sep.style.removeProperty("--tidy-tabs-line-opacity");
+      sep.style.removeProperty("--tidy-tabs-line-color");
     });
   };
 

@@ -12,16 +12,16 @@
 .pinned-tabs-container-separator .tidy-tabs-separator-line,
 .pinned-tabs-container-separator toolbarseparator {
   width: 100% !important;
-  height: 1px;
-  min-height: 1px !important;
+  height: var(--tidy-tabs-line-thickness, 1px);
+  min-height: var(--tidy-tabs-line-thickness, 1px);
   display: block;
   overflow: visible;
   min-width: 0;
   margin: var(--tidy-tabs-line-margin, 4px) auto !important;
   flex-grow: 1;
-  opacity: 0.35;
+  opacity: var(--tidy-tabs-line-opacity, 0.35);
   transition: opacity 0.15s ease-in-out;
-  background: var(--sidebar-text-color, var(--toolbar-color, currentColor)) !important;
+  background: var(--tidy-tabs-line-color, var(--sidebar-text-color, currentColor)) !important;
   border: none !important;
 }
 

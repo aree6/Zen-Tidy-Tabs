@@ -195,8 +195,34 @@
       },
       {
         "property": "zen.tidytabs.ui.separator-line-margin",
-        "label": "Line vertical margin (0–20 px)",
+        "label": "Line vertical margin (px)",
         "type": "string",
+        "defaultValue": "4",
+        "placeholder": "e.g. 4"
+      },
+      {
+        "property": "zen.tidytabs.ui.separator-line-thickness",
+        "label": "Line thickness (px)",
+        "type": "string",
+        "defaultValue": "1",
+        "placeholder": "e.g. 1 or 2"
+      },
+      {
+        "property": "zen.tidytabs.ui.separator-line-color",
+        "label": "Line color (hex or auto)",
+        "type": "string",
+        "defaultValue": "auto",
+        "placeholder": "auto or #RRGGBB"
+      },
+      {
+        "property": "zen.tidytabs.ui.separator-line-opacity",
+        "label": "Line opacity (0.1–1)",
+        "type": "string",
+        "defaultValue": "0.35",
+        "placeholder": "e.g. 0.35"
+      },
+      {
+        "property": "zen.tidytabs.ui.inline-icon-size",
         "defaultValue": "4",
         "placeholder": "e.g. 4"
       },
