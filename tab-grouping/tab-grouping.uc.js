@@ -2240,23 +2240,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     document.documentElement.classList.toggle(SORT_IN_PROGRESS_CLASS, !!on);
   };
 
-  const SORT_STATUS_TEXT = {
-    idle: "Groups",
-    grouping: "Grouping…",
-    retrying: "Retrying…",
-    failed: "Failed",
-    done: "Done",
-  };
-  let currentSortStatus = "idle";
-  const updateSortStatus = (status) => {
-    currentSortStatus = SORT_STATUS_TEXT[status] ? status : "idle";
-    document.querySelectorAll(".tidy-tabs-sort-status").forEach((el) => {
-      if (!el?.isConnected) return;
-      el.textContent = SORT_STATUS_TEXT[currentSortStatus];
-      el.dataset.status = currentSortStatus;
-    });
-  };
-
   // --- Main Sorting Function ---
   // Single entry point. Topic-based grouping only:
   //   - AI (Firefox local ML) when `browser.ml.enabled` is on
@@ -2267,7 +2250,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     if (isSorting) return;
     isSorting = true;
     setSortingVisualState(true);
-    updateSortStatus("grouping");
     const { runId } = beginSortRun();
 
     let separatorsToSort = [];
@@ -2343,7 +2325,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           `[TabSort] Selected engine is unavailable. Check preferences (e.g. missing API key for OpenRouter, or browser.ml.enabled off for Local AI).`
         );
         if (CONFIG.ENABLE_FAILURE_ANIMATION) startFailureAnimation();
-        updateSortStatus("failed");
         return;
       }
 
@@ -2366,11 +2347,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
             allExistingGroupNames
           );
           engineProducedGroups = true;
-          updateSortStatus("done");
           console.log(`[TabSort] OpenRouter produced ${Object.keys(finalGroups).length} group(s)`);
         } else {
           console.warn(`[TabSort] OpenRouter returned empty/invalid groups`);
-          updateSortStatus("retrying");
         }
       } else if (engine === "openrouter") {
         console.warn(`[TabSort] OpenRouter selected but not configured (missing API key or model)`);
@@ -2450,13 +2429,11 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
       if (sortingFailed) {
         if (CONFIG.ENABLE_FAILURE_ANIMATION) startFailureAnimation();
-        updateSortStatus("failed");
         return;
       }
 
       if (Object.keys(finalGroups).length === 0) {
         console.log("[TabSort] No groups produced after rescue pipeline.");
-        updateSortStatus("failed");
         return;
       }
 
@@ -2716,7 +2693,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
       // Apply group background tints after sorting creates new groups
       applyGroupTints();
-      updateSortStatus("done");
     } catch (error) {
       console.error("Error during overall sorting process:", error);
     } finally {
@@ -2732,9 +2708,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         }
         activeSortAbortController = null;
         activeSortCleanupTimer = null;
-        if (currentSortStatus === "done" || currentSortStatus === "failed") {
-          updateSortStatus("idle");
-        }
       }, isPlayingFailureAnimation ? CONFIG.FAILURE_PULSE_DURATION * CONFIG.FAILURE_PULSE_COUNT + 300 : 800);
     }
   };
@@ -2948,20 +2921,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     return btn;
   };
 
-  const createSortStatusChip = () => {
-    const chip = document.createElement("button");
-    chip.className = "tidy-tabs-inline-btn tidy-tabs-sort-status";
-    chip.type = "button";
-    chip.tabIndex = -1;
-    chip.dataset.action = "status";
-    chip.dataset.status = currentSortStatus;
-    chip.textContent = SORT_STATUS_TEXT[currentSortStatus];
-    chip.title = "Current sort status";
-    chip.setAttribute("aria-live", "polite");
-    chip.setAttribute("aria-atomic", "true");
-    return chip;
-  };
-
   // Determine which buttons to show based on config.
   const getInlineButtonDefs = () => {
     const defs = [];
@@ -3067,8 +3026,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       // Build button container
       const container = document.createElement("div");
       container.className = "tidy-tabs-button-container";
-
-      container.appendChild(createSortStatusChip());
 
       for (const def of buttonDefs) {
         const btn = createInlineButton(def.action, def.label, def.icon, def.tooltip);
