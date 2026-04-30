@@ -3177,6 +3177,18 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       }
 
       sep.appendChild(container);
+
+      // Detect if sidebar is too narrow and switch to compact (icon-only) mode
+      const sidebarWidth = document.querySelector("#sidebar")?.clientWidth || 
+                          document.querySelector(".sidebar")?.clientWidth ||
+                          sep.closest("[role='main']")?.clientWidth ||
+                          300;
+      // If sidebar is less than ~280px, switch to icon-only mode
+      if (sidebarWidth < 280) {
+        sep.classList.add("tidy-tabs-compact");
+      } else {
+        sep.classList.remove("tidy-tabs-compact");
+      }
     }
   };
 
@@ -3191,7 +3203,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         "tidy-tabs-inline-active", "tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden",
         "tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both",
         "tidy-tabs-separator-always", "tidy-tabs-separator-hover", "tidy-tabs-separator-hidden",
-        "tidy-tabs-line-off", "tidy-tabs-line-fade"
+        "tidy-tabs-line-off", "tidy-tabs-line-fade", "tidy-tabs-compact"
       );
       sep.querySelectorAll(".tidy-tabs-separator-line").forEach((line) => {
         line.classList.remove("tidy-tabs-separator-line");
