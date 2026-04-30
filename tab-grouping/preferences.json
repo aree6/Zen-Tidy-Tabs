@@ -120,13 +120,13 @@
       },
       {
         "property": "zen.tidytabs.menu.sort-groups",
-        "label": "Show 'Groups' menu item",
+        "label": "Show 'Auto organise into groups' menu item",
         "type": "checkbox",
         "defaultValue": true
       },
       {
         "property": "zen.tidytabs.menu.sort-folders",
-        "label": "Show 'Folders' menu item",
+        "label": "Show 'Auto organise into folders' menu item",
         "type": "checkbox",
         "defaultValue": true
       },

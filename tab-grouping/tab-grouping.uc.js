@@ -2927,14 +2927,14 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
   const SIDEBAR_MENU_ITEMS = [
     {
       id: "tidy-tabs-sort-groups",
-      label: "Groups",
+      label: "Auto organise into groups",
       iconKey: "groups",
       prefKey: "MENU_SORT_GROUPS",
       useFolders: false,
     },
     {
       id: "tidy-tabs-sort-folders",
-      label: "Folders",
+      label: "Auto organise into folders",
       iconKey: "folders",
       prefKey: "MENU_SORT_FOLDERS",
       useFolders: true,

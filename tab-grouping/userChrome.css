@@ -7,6 +7,9 @@
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
+  /* Vertical breathing space for BOTH the line and inline buttons */
+  padding-block: var(--tidy-tabs-line-margin, 4px) !important;
+  box-sizing: border-box !important;
 }
 
 .pinned-tabs-container-separator svg:not(.tidy-tabs-inline-icon),
@@ -17,7 +20,7 @@
   min-width: 0 !important;
   height: var(--tidy-tabs-line-thickness, 1px);
   min-height: var(--tidy-tabs-line-thickness, 1px);
-  margin-block: var(--tidy-tabs-line-margin, 4px) !important;
+  margin-block: 0 !important;
   margin-inline: auto !important;
   flex-grow: 1;
   opacity: var(--tidy-tabs-line-current-opacity);
@@ -38,7 +41,7 @@
 .pinned-tabs-container-separator toolbarseparator {
   width: 100% !important;
   min-width: 0 !important;
-  margin-block: var(--tidy-tabs-line-margin, 4px) !important;
+  margin-block: 0 !important;
   margin-inline: auto !important;
   flex-grow: 1;
   opacity: var(--tidy-tabs-line-current-opacity);
