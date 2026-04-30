@@ -61,7 +61,7 @@
     SHOW_CLEAR_BUTTON: true,
     SHOW_GROUP_BUTTON: true,
     SHOW_UNGROUP_BUTTON: true,
-    SEPARATOR_LINE_MODE: "hidden",        // "always" | "hover" | "hidden"
+    SEPARATOR_LINE_MODE: "hidden",        // "hover" | "hidden"
     SEPARATOR_LINE_MARGIN: 4,            // margin top/bottom in pixels
     SEPARATOR_LINE_THICKNESS: 1,        // line thickness in px
     SEPARATOR_LINE_COLOR: "auto",       // "auto" or hex color
@@ -2818,7 +2818,13 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     const visibility = CONFIG.INLINE_BUTTON_VISIBILITY || "hover";
     const style = CONFIG.INLINE_BUTTON_STYLE || "text";
     const iconSize = Math.max(12, Math.min(32, Number(CONFIG.INLINE_ICON_SIZE) || 18));
-    const lineMode = CONFIG.SEPARATOR_LINE_MODE || "hover";
+    const rawLineMode = `${CONFIG.SEPARATOR_LINE_MODE || "hover"}`
+      .trim()
+      .toLowerCase();
+    const lineMode =
+      rawLineMode === "hidden" || rawLineMode === "none" || rawLineMode === "off"
+        ? "hidden"
+        : "hover";
     const lineMargin = Math.max(0, Math.min(20, Number(CONFIG.SEPARATOR_LINE_MARGIN) || 4));
     const lineThickness = Math.max(1, Math.min(8, Number(CONFIG.SEPARATOR_LINE_THICKNESS) || 1));
     const lineOpacity = Math.max(0.1, Math.min(1, Number(CONFIG.SEPARATOR_LINE_OPACITY) || 0.35));
@@ -2851,10 +2857,16 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       sep.classList.remove("tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both");
       sep.classList.add(`tidy-tabs-btn-style-${style}`);
 
-      // Apply separator line mode class - clean naming
-      sep.classList.remove("tidy-tabs-line-off", "tidy-tabs-line-fade");
-      if (lineMode === "hidden") sep.classList.add("tidy-tabs-line-off");
-      else sep.classList.add("tidy-tabs-line-fade");
+      // Apply separator line mode class
+      sep.classList.remove(
+        "tidy-tabs-separator-hover",
+        "tidy-tabs-separator-hidden",
+        "tidy-tabs-separator-always",
+        "tidy-tabs-line-off",
+        "tidy-tabs-line-fade"
+      );
+      if (lineMode === "hidden") sep.classList.add("tidy-tabs-separator-hidden");
+      else sep.classList.add("tidy-tabs-separator-hover");
 
       // Build button container
       const container = document.createElement("div");
@@ -2879,6 +2891,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       sep.classList.remove(
         "tidy-tabs-inline-active", "tidy-tabs-buttons-always", "tidy-tabs-buttons-hidden",
         "tidy-tabs-btn-style-text", "tidy-tabs-btn-style-icons", "tidy-tabs-btn-style-both",
+        "tidy-tabs-separator-always", "tidy-tabs-separator-hover", "tidy-tabs-separator-hidden",
         "tidy-tabs-line-off", "tidy-tabs-line-fade"
       );
       sep.querySelectorAll(".tidy-tabs-separator-line").forEach((line) => {

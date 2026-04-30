@@ -190,7 +190,7 @@
         "defaultValue": "hidden",
         "options": [
           { "label": "Off (just buttons)", "value": "hidden" },
-          { "label": "Show, fade on hover", "value": "hover" }
+          { "label": "Show on hover", "value": "hover" }
         ]
       },
       {
@@ -220,11 +220,6 @@
         "type": "string",
         "defaultValue": "0.35",
         "placeholder": "e.g. 0.35"
-      },
-      {
-        "property": "zen.tidytabs.ui.inline-icon-size",
-        "defaultValue": "4",
-        "placeholder": "e.g. 4"
       },
       {
         "property": "zen.tidytabs.ui.inline-icon-size",
