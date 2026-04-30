@@ -615,6 +615,13 @@
     return OPENROUTER_MODELS[slug] || OPENROUTER_MODELS.free;
   };
 
+  const getOpenRouterFallbackModels = (modelId) => {
+    const models = [];
+    if (modelId) models.push(modelId);
+    if (modelId && modelId !== "openrouter/free") models.push("openrouter/free");
+    return [...new Set(models)];
+  };
+
   // Defensively extract a JSON object from a possibly-decorated model
   // response. Some models still emit text around the JSON, so we strip
   // fences and then parse the outermost object. Returns null on any failure.
@@ -724,6 +731,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       const reasoning = getOpenRouterReasoning(modelId);
       const body = {
         model: modelId,
+        models: getOpenRouterFallbackModels(modelId),
         // Output is bounded roughly by (groups * ~30 chars) + tab numbers;
         // 1024 is comfortable headroom for ~100 tabs across ~20 groups.
         max_tokens: 1024,
@@ -758,18 +766,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         console.warn(
           `[TabSort][OpenRouter] HTTP ${response.status} from ${modelId}; body will be discarded.`
         );
-        if (modelId !== "openrouter/free" && modelId !== "openrouter/auto") {
-          const fallbackModelId = "openrouter/free";
-          if (fallbackModelId !== modelId) {
-            console.warn(`[TabSort][OpenRouter] Retrying with ${fallbackModelId}.`);
-            return await askOpenRouterForGroups(
-              tabs,
-              existingGroupNames,
-              useFolders,
-              fallbackModelId
-            );
-          }
-        }
         return null;
       }
 
