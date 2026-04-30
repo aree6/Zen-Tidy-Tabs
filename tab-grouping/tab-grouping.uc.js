@@ -2954,6 +2954,42 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
             } catch {}
           }
         }
+        // Persist state on separator for reconstruction
+        const sep = collapseBtn.closest(".pinned-tabs-container-separator");
+        if (sep) {
+          sep.dataset.tidyCollapseState = isAllCollapsed ? "collapsed" : "expanded";
+        }
+      }
+    }
+  };
+
+  // Restore collapse button state after button recreation
+  const restoreCollapseButtonState = (btn) => {
+    if (!btn) return;
+    const sep = btn.closest(".pinned-tabs-container-separator");
+    const wasCollapsed = sep?.dataset?.tidyCollapseState === "collapsed";
+    
+    if (wasCollapsed !== isAllCollapsed) {
+      isAllCollapsed = wasCollapsed;
+    }
+    
+    // Update icon based on current state
+    const iconKey = isAllCollapsed ? "expand" : "collapse";
+    const iconWrap = btn.querySelector(".btn-icon");
+    if (iconWrap) {
+      const template = TIDY_TABS_ICON_SVGS[iconKey];
+      if (template) {
+        try {
+          const svg = template.replace(/\{\{STROKE\}\}/g, "currentColor");
+          const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+          const svgEl = document.importNode(parsed.documentElement, true);
+          svgEl.classList.add("tidy-tabs-inline-icon");
+          svgEl.setAttribute("focusable", "false");
+          svgEl.removeAttribute("width");
+          svgEl.removeAttribute("height");
+          iconWrap.innerHTML = "";
+          iconWrap.appendChild(svgEl);
+        } catch {}
       }
     }
   };
@@ -3132,6 +3168,12 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       for (const def of buttonDefs) {
         const btn = createInlineButton(def.action, def.label, def.icon, def.tooltip);
         container.appendChild(btn);
+        // Restore collapse button state if this is the collapse button
+        if (def.action === "collapse") {
+          restoreCollapseButtonState(btn);
+          // Store current state on separator for persistence
+          sep.dataset.tidyCollapseState = isAllCollapsed ? "collapsed" : "expanded";
+        }
       }
 
       sep.appendChild(container);
