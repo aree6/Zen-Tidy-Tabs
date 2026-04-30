@@ -3191,16 +3191,17 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
       sep.appendChild(container);
 
-      // Detect if sidebar is too narrow and switch to compact (icon-only) mode
-      // Find the sidebar container by walking up from the separator
-      let sidebarEl = sep.closest("sidebar, #sidebar, .sidebar, [role='complementary'], .zen-sidebar");
-      if (!sidebarEl) {
-        // Fallback: find any container that's likely the sidebar
-        sidebarEl = sep.parentElement?.parentElement;
-      }
-      const sidebarWidth = sidebarEl?.clientWidth || sep.parentElement?.clientWidth || 300;
-      // If sidebar is less than ~280px, switch to icon-only mode
-      if (sidebarWidth > 0 && sidebarWidth < 280) {
+      // Detect if sidebar is in compact mode or too narrow - switch to icon-only mode
+      // Check for Zen's compact mode attribute first
+      const isCompactMode = document.documentElement?.hasAttribute("zen-compact-mode") ||
+                           document.querySelector("#sidebar-box")?.classList.contains("zen-sidebar-compact");
+      
+      // Get sidebar width
+      const sidebarBox = document.querySelector("#sidebar-box");
+      const sidebarWidth = sidebarBox?.clientWidth || 0;
+      
+      // Switch to compact mode if Zen is in compact mode OR sidebar is less than 280px
+      if (isCompactMode || (sidebarWidth > 0 && sidebarWidth < 280)) {
         sep.classList.add("tidy-tabs-compact");
       } else {
         sep.classList.remove("tidy-tabs-compact");
