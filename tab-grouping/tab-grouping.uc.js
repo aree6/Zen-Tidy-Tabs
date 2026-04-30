@@ -66,6 +66,10 @@
     SEPARATOR_LINE_THICKNESS: 1,        // line thickness in px
     SEPARATOR_LINE_COLOR: "auto",       // "auto" or hex color
     SEPARATOR_LINE_OPACITY: 0.35,      // line opacity
+    // Collapse/expand all groups button on separator
+    ENABLE_COLLAPSE_BUTTON: true,      // enable collapse/expand button
+    COLLAPSE_BUTTON_STYLE: "icon",    // "icon" | "text" | "both"
+    COLLAPSE_BUTTON_VISIBILITY: "hover", // "always" | "hover" | "hidden"
     // Subtle group/folder background and label tint from favicon colors
     ENABLE_GROUP_BG_TINT: false,
     ENABLE_GROUP_LABEL_TINT: false,
@@ -202,6 +206,9 @@
     GROUP_BG_OPACITY: ["double", "ui.group-bg-opacity"],
     GROUP_LABEL_OPACITY: ["double", "ui.group-label-opacity"],
     ENABLE_CONTEXT_MENU: ["bool", "ui.enable-context-menu"],
+    ENABLE_COLLAPSE_BUTTON: ["bool", "ui.enable-collapse-button"],
+    COLLAPSE_BUTTON_STYLE: ["string", "ui.collapse-button-style"],
+    COLLAPSE_BUTTON_VISIBILITY: ["string", "ui.collapse-button-visibility"],
   };
 
   const services =
@@ -2867,6 +2874,90 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     }
   };
 
+  // Collapse/expand all groups except the one containing the active tab.
+  // Uses a state flag to toggle between collapsed and expanded.
+  let isAllCollapsed = false;
+
+  const toggleCollapseAllGroups = () => {
+    const currentWorkspaceId = window.gZenWorkspaces?.activeWorkspace;
+    if (!currentWorkspaceId) return;
+
+    const activeTab = gBrowser?.selectedTab;
+    const activeGroup = activeTab ? getTabContainerGroup(activeTab) : null;
+
+    const groups = getWorkspaceGroupElements(currentWorkspaceId);
+    let changed = 0;
+
+    for (const group of groups) {
+      if (!group?.isConnected) continue;
+      if (group === activeGroup) continue;
+
+      const isZenFolder = isFolderGroupElement(group);
+      const isCurrentlyCollapsed = isZenFolder
+        ? group.collapsed
+        : group.hasAttribute("collapsed");
+
+      if (isAllCollapsed) {
+        // Expand all (except active)
+        if (isCurrentlyCollapsed) {
+          if (isZenFolder) {
+            group.collapsed = false;
+          } else {
+            group.removeAttribute("collapsed");
+            const labelContainer = group.querySelector(".tab-group-label-container");
+            if (labelContainer) {
+              labelContainer.setAttribute("aria-expanded", "true");
+            }
+          }
+          changed++;
+        }
+      } else {
+        // Collapse all (except active)
+        if (!isCurrentlyCollapsed) {
+          if (isZenFolder) {
+            group.collapsed = true;
+          } else {
+            group.setAttribute("collapsed", "true");
+            const labelContainer = group.querySelector(".tab-group-label-container");
+            if (labelContainer) {
+              labelContainer.setAttribute("aria-expanded", "false");
+            }
+          }
+          changed++;
+        }
+      }
+    }
+
+    if (changed > 0 || groups.length === 0) {
+      isAllCollapsed = !isAllCollapsed;
+      // Update button tooltip and icon to reflect next action
+      const collapseBtn = document.querySelector('.tidy-tabs-inline-btn[data-action="collapse"]');
+      if (collapseBtn) {
+        collapseBtn.title = isAllCollapsed ? "Expand all groups (except active)" : "Collapse all groups (except active)";
+        collapseBtn.setAttribute("aria-label", isAllCollapsed ? "Expand all groups (except active)" : "Collapse all groups (except active)");
+        // Update icon
+        const iconKey = isAllCollapsed ? "expand" : "collapse";
+        const iconWrap = collapseBtn.querySelector(".btn-icon");
+        if (iconWrap) {
+          const template = TIDY_TABS_ICON_SVGS[iconKey];
+          if (template) {
+            try {
+              const svg = template.replace(/\{\{STROKE\}\}/g, "currentColor");
+              const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+              const svgEl = document.importNode(parsed.documentElement, true);
+              svgEl.classList.add("tidy-tabs-inline-icon");
+              svgEl.setAttribute("focusable", "false");
+              svgEl.removeAttribute("width");
+              svgEl.removeAttribute("height");
+              iconWrap.innerHTML = "";
+              iconWrap.appendChild(svgEl);
+            } catch {}
+          }
+        }
+      }
+    }
+  };
+
   // Build a single inline button element.
   // Uses HTML <button> because the separator lives in an HTML context
   // within Zen's sidebar — XUL toolbarbutton won't render there.
@@ -2914,6 +3005,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         case "ungroup":
           ungroupAllTabs();
           break;
+        case "collapse":
+          toggleCollapseAllGroups();
+          break;
       }
     };
     btn.addEventListener("click", clickHandler);
@@ -2954,6 +3048,14 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
         label: "Unsort",
         icon: INLINE_ACTION_ICON_KEYS.ungroup,
         tooltip: "Unsort tabs without closing them",
+      });
+    }
+    if (CONFIG.ENABLE_COLLAPSE_BUTTON) {
+      defs.push({
+        action: "collapse",
+        label: "Collapse",
+        icon: INLINE_ACTION_ICON_KEYS.collapse,
+        tooltip: "Collapse/expand all groups except active",
       });
     }
     return defs;
@@ -3115,6 +3217,12 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     // ungroup
     ungroup:
       `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`,
+    // collapse/expand toggle
+    collapse:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/></svg>`,
+    // expand (opposite of collapse)
+    expand:
+      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{STROKE}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>`,
   };
 
   // Pick a stroke color that reads well on the current menu background.

@@ -265,6 +265,12 @@
         "type": "checkbox",
         "defaultValue": true
       },
+      {
+        "property": "zen.tidytabs.ui.enable-collapse-button",
+        "label": "Show Collapse/Expand button (collapse all groups except active)",
+        "type": "checkbox",
+        "defaultValue": true
+      },
 
   {
     "type": "separator",
