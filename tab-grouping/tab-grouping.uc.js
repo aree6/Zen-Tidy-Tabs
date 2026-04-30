@@ -46,7 +46,7 @@
     GROUPING_ENGINE: "hybrid",
     // OpenRouter model slug (separate from engine choice so the dropdown
     // never mixes "local" with API-key model names).
-    OPENROUTER_MODEL: "ling-flash",
+    OPENROUTER_MODEL: "free",
     // OpenRouter API key. Empty string disables the OpenRouter path.
     OPENROUTER_API_KEY: "",
     // Optional comma/newline-separated host list that should stay loose
@@ -119,19 +119,20 @@
     return "none";
   };
 
-  // Short dropdown slug -> OpenRouter model ID. Slugs are used as the pref
-  // value (safer across Zen's dropdown schema than slashes/colons), and the
-  // mapped ID is what we send in the API request body.
-  //
-  // Picks (researched Apr 2026 against openrouter.ai/collections/free-models
-  // for this specific use case — short topic-label generation from tab titles):
-  //   - ling-flash:   explicitly "flash" model (7.4B active), lowest latency
-  //   - glm-air:      lightweight MoE with hybrid inference (reasoning field)
+  // Short dropdown slug -> OpenRouter model ID. We use openrouter/free so
+  // OpenRouter auto-routes to an available free model. This avoids 404s
+  // when specific free models get removed or rotated.
   const OPENROUTER_MODELS = {
-    "ling-flash": "inclusionai/ling-2.6-flash:free",
-    "glm-air": "z-ai/glm-4.5-air:free",
-    "llama33-70b": "meta-llama/llama-3.3-70b-instruct:free",
-    "gemma3-27b": "google/gemma-3-27b-it:free",
+    "free": "openrouter/free",
+    "gemma-4-26b": "google/gemma-4-26b-a4b-it:free",
+    "minimax-m2.5": "minimax/minimax-m2.5:free",
+    "ling-2.6-1t": "inclusionai/ling-2.6-1t:free",
+    "gemma-4-31b": "google/gemma-4-31b-it:free",
+    "nemotron-3-nano": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "hy3-preview": "tencent/hy3-preview:free",
+    "laguna-xs2": "poolside/laguna-xs.2:free",
+    "laguna-m1": "poolside/laguna-m.1:free",
+    "lfm-2.5-1.2b-thinking": "liquid/lfm-2.5-1.2b-thinking:free",
   };
 
   const PREF_BRANCH = "zen.tidytabs.";

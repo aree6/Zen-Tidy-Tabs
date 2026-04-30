@@ -46,12 +46,18 @@
         "property": "zen.tidytabs.openrouter.model",
         "label": "OpenRouter model",
         "type": "dropdown",
-        "defaultValue": "ling-flash",
+        "defaultValue": "free",
         "options": [
-          { "label": "Ling-2.6 Flash (fastest)", "value": "ling-flash" },
-          { "label": "GLM 4.5 Air (balanced)", "value": "glm-air" },
-          { "label": "Llama 3.3 70B (most accurate)", "value": "llama33-70b" },
-          { "label": "Gemma 3 27B (balanced)", "value": "gemma3-27b" }
+          { "label": "Auto-routing (recommended)", "value": "free" },
+          { "label": "Gemma 4 26B A4B — balanced smart + fast", "value": "gemma-4-26b" },
+          { "label": "MiniMax M2.5 — strong smart + fast", "value": "minimax-m2.5" },
+          { "label": "Ling 2.6 1T — fastest", "value": "ling-2.6-1t" },
+          { "label": "Gemma 4 31B — smartest", "value": "gemma-4-31b" },
+          { "label": "Nemotron 3 Nano — smart + fast", "value": "nemotron-3-nano" },
+          { "label": "Hy3 Preview — smart, slightly slower", "value": "hy3-preview" },
+          { "label": "Laguna XS.2 — balanced agent", "value": "laguna-xs2" },
+          { "label": "Laguna M.1 — fast lightweight", "value": "laguna-m1" },
+          { "label": "LFM 2.5 Thinking — very fast, less smart", "value": "lfm-2.5-1.2b-thinking" }
         ]
       },
       {
