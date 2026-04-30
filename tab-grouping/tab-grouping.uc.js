@@ -2930,11 +2930,17 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
     if (changed > 0 || groups.length === 0) {
       isAllCollapsed = !isAllCollapsed;
-      // Update button tooltip and icon to reflect next action
+      // Update button tooltip, icon and label to reflect next action
       const collapseBtn = document.querySelector('.tidy-tabs-inline-btn[data-action="collapse"]');
       if (collapseBtn) {
+        const newLabel = isAllCollapsed ? "Expand" : "Collapse";
         collapseBtn.title = isAllCollapsed ? "Expand all groups (except active)" : "Collapse all groups (except active)";
         collapseBtn.setAttribute("aria-label", isAllCollapsed ? "Expand all groups (except active)" : "Collapse all groups (except active)");
+        // Update label text
+        const labelEl = collapseBtn.querySelector(".btn-label");
+        if (labelEl) {
+          labelEl.textContent = newLabel;
+        }
         // Update icon
         const iconKey = isAllCollapsed ? "expand" : "collapse";
         const iconWrap = collapseBtn.querySelector(".btn-icon");
@@ -2971,6 +2977,13 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
     
     if (wasCollapsed !== isAllCollapsed) {
       isAllCollapsed = wasCollapsed;
+    }
+    
+    // Update label text
+    const newLabel = isAllCollapsed ? "Expand" : "Collapse";
+    const labelEl = btn.querySelector(".btn-label");
+    if (labelEl) {
+      labelEl.textContent = newLabel;
     }
     
     // Update icon based on current state
@@ -3179,12 +3192,15 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       sep.appendChild(container);
 
       // Detect if sidebar is too narrow and switch to compact (icon-only) mode
-      const sidebarWidth = document.querySelector("#sidebar")?.clientWidth || 
-                          document.querySelector(".sidebar")?.clientWidth ||
-                          sep.closest("[role='main']")?.clientWidth ||
-                          300;
+      // Find the sidebar container by walking up from the separator
+      let sidebarEl = sep.closest("sidebar, #sidebar, .sidebar, [role='complementary'], .zen-sidebar");
+      if (!sidebarEl) {
+        // Fallback: find any container that's likely the sidebar
+        sidebarEl = sep.parentElement?.parentElement;
+      }
+      const sidebarWidth = sidebarEl?.clientWidth || sep.parentElement?.clientWidth || 300;
       // If sidebar is less than ~280px, switch to icon-only mode
-      if (sidebarWidth < 280) {
+      if (sidebarWidth > 0 && sidebarWidth < 280) {
         sep.classList.add("tidy-tabs-compact");
       } else {
         sep.classList.remove("tidy-tabs-compact");
