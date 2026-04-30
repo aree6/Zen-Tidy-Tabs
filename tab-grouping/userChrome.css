@@ -9,7 +9,7 @@
   box-shadow: none !important;
 }
 
-.pinned-tabs-container-separator > svg:not(.tidy-tabs-inline-icon),
+.pinned-tabs-container-separator svg:not(.tidy-tabs-inline-icon),
 .pinned-tabs-container-separator .tidy-tabs-separator-line {
   width: 100% !important;
   display: block;
@@ -24,10 +24,12 @@
   transition: opacity 0.15s ease-in-out;
 }
 
-.pinned-tabs-container-separator > svg:not(.tidy-tabs-inline-icon) :is(#separator-path, .separator-path-segment, path),
+.pinned-tabs-container-separator svg:not(.tidy-tabs-inline-icon) :is(#separator-path, .separator-path-segment, path),
 .pinned-tabs-container-separator .tidy-tabs-separator-line :is(#separator-path, .separator-path-segment, path) {
   stroke: var(--tidy-tabs-line-color, var(--sidebar-text-color, currentColor)) !important;
   stroke-width: var(--tidy-tabs-line-thickness, 1px) !important;
+  stroke-opacity: var(--tidy-tabs-line-current-opacity) !important;
+  opacity: 1 !important;
   vector-effect: non-scaling-stroke;
   fill: none !important;
 }
@@ -296,6 +298,15 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
   display: none !important;
 }
 
+/* Keep buttons centered when line is hidden but buttons remain visible */
+.tidy-tabs-separator-hidden {
+  justify-content: center !important;
+}
+
+.tidy-tabs-separator-hidden .tidy-tabs-button-container {
+  margin-inline: 0 !important;
+}
+
 /* --- Button style: ICONS only --- */
 .tidy-tabs-btn-style-icons .tidy-tabs-inline-btn .btn-label {
   display: none !important;
@@ -323,7 +334,7 @@ tab-group:not(zen-folder) .tabbrowser-tab[group]::before {
 }
 
 /* Mode: HIDDEN — line never shows */
-.tidy-tabs-separator-hidden > svg:not(.tidy-tabs-inline-icon),
+.tidy-tabs-separator-hidden svg:not(.tidy-tabs-inline-icon),
 .tidy-tabs-separator-hidden .tidy-tabs-separator-line,
 .tidy-tabs-separator-hidden > toolbarseparator,
 .tidy-tabs-separator-hidden toolbarseparator {
