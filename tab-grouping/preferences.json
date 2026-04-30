@@ -43,6 +43,12 @@
       "margin": "15px 0 15px 0"
     },
       {
+        "type": "text",
+        "label": "Auto-routing and Ling 2.6 1T are JSON-safe; other models are best-effort.",
+        "margin": "8px 0 12px 0",
+        "size": "13px"
+      },
+      {
         "property": "zen.tidytabs.openrouter.model",
         "label": "OpenRouter model",
         "type": "dropdown",

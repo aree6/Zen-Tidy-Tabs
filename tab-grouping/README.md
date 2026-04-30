@@ -1,12 +1,12 @@
 # Zen Tab Grouping
 
-Sorts and groups Zen Browser tabs by topic using local AI embeddings, OpenRouter, or deterministic fuzzy fallback.
+Sorts and groups Zen Browser tabs by topic using local AI, OpenRouter, or deterministic fuzzy grouping.
 
 ## Features
 
 - **AI-powered grouping** using local browser ML or OpenRouter models
-- **Fuzzy fallback** clustering when AI is unavailable
-- **Rescue passes** ensure every tab lands in a group
+- **Hybrid mode** chains OpenRouter → Local AI → Fuzzy
+- **Strict modes** keep OpenRouter / Local AI / Fuzzy isolated
 - **Success / failure animations** (configurable)
 - **Clear-button protection** so grouped tabs are not accidentally closed
 - **Context-menu actions** to sort into tab groups or folders

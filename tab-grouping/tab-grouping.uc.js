@@ -128,12 +128,38 @@
     "minimax-m2.5": "minimax/minimax-m2.5:free",
     "ling-2.6-1t": "inclusionai/ling-2.6-1t:free",
     "gemma-4-31b": "google/gemma-4-31b-it:free",
-    "nemotron-3-nano": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "nemotron-3-nano": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     "hy3-preview": "tencent/hy3-preview:free",
     "laguna-xs2": "poolside/laguna-xs.2:free",
     "laguna-m1": "poolside/laguna-m.1:free",
     "lfm-2.5-1.2b-thinking": "liquid/lfm-2.5-1.2b-thinking:free",
   };
+
+  const OPENROUTER_STRUCTURED_OUTPUT_MODELS = new Set([
+    "openrouter/free",
+    "inclusionai/ling-2.6-1t:free",
+  ]);
+
+  const buildOpenRouterResponseFormat = () => ({
+    type: "json_schema",
+    json_schema: {
+      name: "tab_groups",
+      strict: true,
+      schema: {
+        type: "object",
+        minProperties: 1,
+        additionalProperties: {
+          type: "array",
+          items: {
+            type: "integer",
+            minimum: 1,
+          },
+          minItems: 2,
+          uniqueItems: true,
+        },
+      },
+    },
+  });
 
   const PREF_BRANCH = "zen.tidytabs.";
   const PREFS = {
@@ -533,10 +559,8 @@
   };
 
   // Defensively extract a JSON object from a possibly-decorated model
-  // response. Free models occasionally wrap output in markdown fences or
-  // tack on trailing commentary — we strip both, then grab the outermost
-  // {...} slice and try JSON.parse. Returns null on any failure rather
-  // than throwing so callers can fall through to fuzzy grouping.
+  // response. Some models still emit text around the JSON, so we strip
+  // fences and then parse the outermost object. Returns null on any failure.
   const parseGroupingJson = (text) => {
     if (!text || typeof text !== "string") return null;
     let cleaned = text.trim();
@@ -562,8 +586,7 @@
   // calls + N naming calls, we send the entire loose-tab list once and let
   // the model decide both (a) which tabs cluster together and (b) what to
   // name each cluster. Returns a `{ topicName: [tab, tab, ...] }` map on
-  // success (same shape as `fuzzyGroupByTokens`) or null on any failure so
-  // the caller can degrade to fuzzy grouping.
+  // success (same shape as `fuzzyGroupByTokens`) or null on any failure.
   //
   // Chrome-privileged fetch: this script runs as a user chrome script, so
   // it can reach arbitrary origins without CSP restrictions. We still set a
@@ -581,6 +604,12 @@
     const modelSlug = (CONFIG.OPENROUTER_MODEL || "").trim();
     const modelId = OPENROUTER_MODELS[modelSlug];
     const apiKey = (CONFIG.OPENROUTER_API_KEY || "").trim();
+
+    if (!OPENROUTER_STRUCTURED_OUTPUT_MODELS.has(modelId)) {
+      console.warn(
+        `[TabSort][OpenRouter] ${modelId} does not guarantee structured JSON output; parsing is best-effort.`
+      );
+    }
 
     // Numbered list keeps the contract tight: "give me back these numbers".
     // Numbers are way more reliable than asking the model to echo titles
@@ -637,6 +666,9 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
+        ...(OPENROUTER_STRUCTURED_OUTPUT_MODELS.has(modelId)
+          ? { response_format: buildOpenRouterResponseFormat() }
+          : {}),
       };
 
       const response = await fetch(
@@ -663,7 +695,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       }
 
       const json = await response.json();
-      const content = json?.choices?.[0]?.message?.content || json?.choices?.[0]?.message?.reasoning;
+      const content = json?.choices?.[0]?.message?.content;
       console.log(`[TabSort][OpenRouter] Raw response length: ${(content || "").length} chars`);
       const parsed = parseGroupingJson(content);
       if (!parsed) {
@@ -712,7 +744,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       return groupCount > 0 ? result : null;
     } catch (e) {
       console.warn(
-        `[TabSort][OpenRouter] Request failed for ${modelId}; falling back to fuzzy.`,
+        `[TabSort][OpenRouter] Request failed for ${modelId}; returning null.`,
         e
       );
       return null;
@@ -2221,7 +2253,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       }
 
       // ----- Fuzzy (hybrid fallback, or direct) -----
-      if (!engineProducedGroups && (engine === "hybrid" || engine === "fuzzy" || engine === "openrouter" || engine === "local-ai")) {
+      if (!engineProducedGroups && (engine === "hybrid" || engine === "fuzzy")) {
         console.log(`[TabSort] Trying Fuzzy grouping for ${initialTabsToSort.length} tabs`);
         finalGroups = fuzzyGroupByTokens(initialTabsToSort, allExistingGroupNames);
         usedFuzzy = true;
@@ -2230,8 +2262,6 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
       }
 
       // --- Rescue ungrouped tabs ---
-      // Rescue passes are fuzzy post-processing: they only run when fuzzy
-      // was actually used (either as the primary engine or as hybrid fallback).
       if (usedFuzzy) {
         console.log(
           `[TabSort] Running post-grouping rescue passes on ${Object.keys(finalGroups).length} initial group(s).`
@@ -2242,9 +2272,7 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
           CONFIG.GROUP_LEFTOVERS_AS_MISC
         );
       } else {
-        console.log(
-          "[TabSort] Skipping rescue passes — engine was AI/OpenRouter, rescue is fuzzy-only."
-        );
+        console.log(`[TabSort] Skipping rescue passes — fuzzy was not used.`);
       }
 
       const finalGroupNames = Object.keys(finalGroups);
