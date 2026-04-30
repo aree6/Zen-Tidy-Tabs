@@ -622,6 +622,17 @@
     return [...new Set(models)];
   };
 
+  const OPENROUTER_RETRYABLE_STATUS = new Set([402, 404, 408, 429, 500, 502, 503]);
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const isRetryableOpenRouterFailure = (errorOrResponse) => {
+    if (!errorOrResponse) return false;
+    if (errorOrResponse instanceof Error) return true;
+    const status = Number(errorOrResponse.status);
+    if (OPENROUTER_RETRYABLE_STATUS.has(status)) return true;
+    return Number.isFinite(status) && status >= 500 && status < 600;
+  };
+
   // Defensively extract a JSON object from a possibly-decorated model
   // response. Some models still emit text around the JSON, so we strip
   // fences and then parse the outermost object. Returns null on any failure.
@@ -726,98 +737,127 @@ Output format: {"Specific Subject": [1,2,3], "Another Subject": [4,5]}
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20000);
+    const maxAttempts = 5;
 
     try {
-      const reasoning = getOpenRouterReasoning(modelId);
-      const body = {
-        model: modelId,
-        models: getOpenRouterFallbackModels(modelId),
-        // Output is bounded roughly by (groups * ~30 chars) + tab numbers;
-        // 1024 is comfortable headroom for ~100 tabs across ~20 groups.
-        max_tokens: 1024,
-        temperature: 0.3,
-        ...(reasoning ? { reasoning } : {}),
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        ...(OPENROUTER_STRUCTURED_OUTPUT_MODELS.has(modelId)
-          ? { response_format: buildOpenRouterResponseFormat() }
-          : {}),
-      };
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const reasoning = getOpenRouterReasoning(modelId);
+        const body = {
+          model: modelId,
+          models: getOpenRouterFallbackModels(modelId),
+          // Output is bounded roughly by (groups * ~30 chars) + tab numbers;
+          // 1024 is comfortable headroom for ~100 tabs across ~20 groups.
+          max_tokens: 1024,
+          temperature: 0.3,
+          ...(reasoning ? { reasoning } : {}),
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          ...(OPENROUTER_STRUCTURED_OUTPUT_MODELS.has(modelId)
+            ? { response_format: buildOpenRouterResponseFormat() }
+            : {}),
+        };
 
-      const response = await fetch(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          method: "POST",
-          signal: controller.signal,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-            // Identifies this mod in OpenRouter's rankings (optional).
-            "HTTP-Referer": "https://github.com/aree6/Zen-Tidy-Tabs",
-            "X-OpenRouter-Title": "Zen Tidy Tabs",
-          },
-          body: JSON.stringify(body),
+        try {
+          const response = await fetch(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+              method: "POST",
+              signal: controller.signal,
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+                // Identifies this mod in OpenRouter's rankings (optional).
+                "HTTP-Referer": "https://github.com/aree6/Zen-Tidy-Tabs",
+                "X-OpenRouter-Title": "Zen Tidy Tabs",
+              },
+              body: JSON.stringify(body),
+            }
+          );
+
+          if (!response.ok) {
+            console.warn(
+              `[TabSort][OpenRouter] HTTP ${response.status} from ${modelId} on attempt ${attempt}/${maxAttempts}.`
+            );
+            if (attempt < maxAttempts && isRetryableOpenRouterFailure(response)) {
+              await sleep(250 * attempt);
+              continue;
+            }
+            return null;
+          }
+
+          const json = await response.json();
+          const responseModel = json?.model || modelId;
+          const content = json?.choices?.[0]?.message?.content;
+          console.log(`[TabSort][OpenRouter] Raw response length: ${(content || "").length} chars`);
+          const parsed = parseGroupingJson(content);
+          if (!parsed) {
+            console.warn(`[TabSort][OpenRouter] Could not parse JSON from response. Raw snippet: ${(content || "").slice(0, 200)}...`);
+            if (attempt < maxAttempts) {
+              await sleep(250 * attempt);
+              continue;
+            }
+            return null;
+          }
+          console.log(`[TabSort][OpenRouter] Parsed ${Object.keys(parsed).length} top-level group(s)`);
+          const flatGroups = flattenNestedGroups(parsed);
+          if (Object.keys(flatGroups).length === 0) {
+            if (attempt < maxAttempts) {
+              await sleep(250 * attempt);
+              continue;
+            }
+            return null;
+          }
+
+          // Map 1-based indices back to real tab objects. We also dedupe in
+          // case the model accidentally lists a tab under two topics; first
+          // assignment wins so output is stable.
+          const assignedTabs = new Set();
+          const result = {};
+
+          for (const [rawName, indices] of Object.entries(flatGroups)) {
+            if (!Array.isArray(indices)) continue;
+            const cleanName = sanitizeGroupPath(rawName);
+            if (!cleanName) continue;
+
+            const tabsForGroup = [];
+            for (const raw of indices) {
+              const n = Number.parseInt(raw, 10);
+              if (!Number.isInteger(n) || n < 1 || n > validTabs.length) continue;
+              const tab = validTabs[n - 1];
+              if (!tab?.isConnected || assignedTabs.has(tab)) continue;
+              assignedTabs.add(tab);
+              tabsForGroup.push(tab);
+            }
+            if (tabsForGroup.length < 2) continue;
+
+            // If the model reused a name with different casing vs. an existing
+            // group, prefer the existing casing so we merge cleanly.
+            const finalName = [...(existingGroupNames || [])].find(
+              (existing) => existing.toLowerCase() === cleanName.toLowerCase()
+            ) || sanitizeGroupNameForSorting(cleanName, validTabs.map(getTabTitle));
+
+            result[finalName] = (result[finalName] || []).concat(tabsForGroup);
+          }
+
+          const groupCount = Object.keys(result).length;
+          console.log(
+            `[TabSort][OpenRouter] ${responseModel} grouped ${assignedTabs.size}/${validTabs.length} tabs into ${groupCount} groups.`
+          );
+          return groupCount > 0 ? result : null;
+        } catch (error) {
+          console.warn(
+            `[TabSort][OpenRouter] Request failed on attempt ${attempt}/${maxAttempts}.`,
+            error
+          );
+          if (attempt < maxAttempts && isRetryableOpenRouterFailure(error)) {
+            await sleep(250 * attempt);
+            continue;
+          }
+          return null;
         }
-      );
-
-      if (!response.ok) {
-        console.warn(
-          `[TabSort][OpenRouter] HTTP ${response.status} from ${modelId}; body will be discarded.`
-        );
-        return null;
       }
-
-      const json = await response.json();
-      const responseModel = json?.model || modelId;
-      const content = json?.choices?.[0]?.message?.content;
-      console.log(`[TabSort][OpenRouter] Raw response length: ${(content || "").length} chars`);
-      const parsed = parseGroupingJson(content);
-      if (!parsed) {
-        console.warn(`[TabSort][OpenRouter] Could not parse JSON from response. Raw snippet: ${(content || "").slice(0, 200)}...`);
-        return null;
-      }
-      console.log(`[TabSort][OpenRouter] Parsed ${Object.keys(parsed).length} top-level group(s)`);
-      const flatGroups = flattenNestedGroups(parsed);
-      if (Object.keys(flatGroups).length === 0) return null;
-
-      // Map 1-based indices back to real tab objects. We also dedupe in
-      // case the model accidentally lists a tab under two topics; first
-      // assignment wins so output is stable.
-      const assignedTabs = new Set();
-      const result = {};
-
-      for (const [rawName, indices] of Object.entries(flatGroups)) {
-        if (!Array.isArray(indices)) continue;
-        const cleanName = sanitizeGroupPath(rawName);
-        if (!cleanName) continue;
-
-        const tabsForGroup = [];
-        for (const raw of indices) {
-          const n = Number.parseInt(raw, 10);
-          if (!Number.isInteger(n) || n < 1 || n > validTabs.length) continue;
-          const tab = validTabs[n - 1];
-          if (!tab?.isConnected || assignedTabs.has(tab)) continue;
-          assignedTabs.add(tab);
-          tabsForGroup.push(tab);
-        }
-        if (tabsForGroup.length < 2) continue;
-
-        // If the model reused a name with different casing vs. an existing
-        // group, prefer the existing casing so we merge cleanly.
-        const finalName = [...(existingGroupNames || [])].find(
-          (existing) => existing.toLowerCase() === cleanName.toLowerCase()
-        ) || sanitizeGroupNameForSorting(cleanName, validTabs.map(getTabTitle));
-
-        result[finalName] = (result[finalName] || []).concat(tabsForGroup);
-      }
-
-      const groupCount = Object.keys(result).length;
-      console.log(
-        `[TabSort][OpenRouter] ${responseModel} grouped ${assignedTabs.size}/${validTabs.length} tabs into ${groupCount} groups.`
-      );
-      return groupCount > 0 ? result : null;
     } catch (e) {
       console.warn(
         `[TabSort][OpenRouter] Request failed for ${modelId}; returning null.`,
